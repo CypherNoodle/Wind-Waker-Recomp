@@ -1,0 +1,11 @@
+name: Repository Audit
+on: [push, pull_request]
+jobs:
+  audit:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run repository safety audit
+        run: bash scripts/audit_repo.sh
+      - name: Validate dependency lock
+        run: python3 -c "import json; d=json.load(open('config/dependencies.lock.json')); assert len(d['dependencies']) > 0"

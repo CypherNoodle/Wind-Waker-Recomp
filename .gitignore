@@ -1,0 +1,49 @@
+# Private user data - never commit
+ref/
+local-research/
+generated/
+/build*/
+game/
+
+# Disc images and extracted game data
+*.iso
+*.rvz
+*.gcm
+*.nfs
+*.wbfs
+*.wia
+*.ciso
+*.gcz
+*.dol
+*.rel
+
+# Saves, captures, credentials, signing material
+__pycache__/
+*.sav
+*.gci
+*.card
+*.raw
+*.ipa
+*.profraw
+*.profdata
+dolphin_*.bin
+*.provisionprofile
+*.p12
+*.mobileprovision
+.DS_Store
+
+# Build artifacts
+*.o
+*.a
+*.dylib
+*.app
+*.dmg
+*.xcarchive
+DerivedData/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*~
