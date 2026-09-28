@@ -1,3 +1,155 @@
+## 2026-09-28 Better Wind Waker's settings as runtime options, no patched disc (Mac-tested)
+
+**What it is.** Each of Better Wind Waker's settings is now a switch of its own (Mods > Better Wind
+Waker Settings on iOS; `BLUEWAKE_OPTIONS` / `run_host.sh OPTIONS=` on the Mac), with Better Wind Waker's
+defaults, and the patched disc (`betterww.iso`, its patcher, PyYAML and Pillow) is no longer needed.
+
+**How** (docs/MODS.md, `mods/betterww/options.txt`):
+- DolRecomp `--option-sites` (patch `dolrecomp/0019`): at each listed instruction the C backend emits
+  the original and the replacement (or a call to native code) behind `dolrecomp_option_flags[n]`; a
+  site is its own block, a replacement branch's target is a block start, and a loop with a site is not
+  outlined. Without the flag the translation is byte-identical to the shipped one.
+- 37 sites (15 chunks: 11 in main.dol, d_a_ship's 3, d_a_agbsw0's 1; 3 more combine with each
+  widescreen mod), checked against Better Wind Waker's patch words and the original instructions.
+- Native code (runtime/host/src/game_options.c) for what its added assembly did: turning while
+  swinging, the camera's inverted C-stick axis, Swift Sail's wind (the hook returns into the game's
+  `dKyw_tact_wind_set` with the link register pointing back at itself) and braking. Instant text
+  patches the loaded messages (4,411 messages, 1,212 timed waits) as the patcher patched the disc's.
+- 40 values written at boot per option; a REL's at its section's linked address, where its data lives
+  for the session. The option table and the writes are generated into `mod_variants.inc`, so
+  `module_export.c` is unchanged.
+
+**Measured on the Mac** (headless unless noted, the Outset save):
+
+| Check | Result |
+| --- | --- |
+| Options mod on, every option off, vs no mod | identical player path (365 probe lines) and block count |
+| Faster rolling: the same run-and-roll input, 9 rolls | 3,450 units vs 3,170 |
+| Faster climbing: one ledge climb | 44 retraces vs 100 |
+| Skip the opening movie: new game to the play scene | retrace 1,043 vs 14,062 |
+| Inverted camera: C-stick right for 1 s (windowed) | the camera turns the other way |
+| All defaults, 3,000 retraces; 16:10 + options (40 chunks) | runs; messages patched |
+
+**Open.** Not reached from the Outset save: Swift/Brisk Sail, the unrestricted boat, the faster
+Ballad, Tingle Chests, no song replays, turning while swinging, grappling, block pushing and the chat
+zoom (the sites and values match the patch; each needs its place in the game). Swift Sail's texture
+and icons are Wind Waker HD's art and not included; the item is still named "Sail". The iOS app
+compiles and links; not yet run on a device. The translator change is in elliotttate/DolRecomp b8b5345 (chrissotraidis 5c91d6e
+plus patch 0019), which elliotttate/RecompCore 7845b6c points at and the Builder now pins.
+
+**Also:** a copy of grass or foliage that comes into view at the screen's edge while the camera turns
+is now blended from where the camera's motion says it stood (its matrix carried back by the inverse
+of the camera's motion) instead of drawn half a camera step ahead (unit test; the grass route is
+unchanged: 1,003 of 1,320 frames interpolated, 60 FPS). The pad script takes the C-stick
+(`retrace:buttons:length:x:y:cx:cy`).
+
+## 2026-09-28 Widescreen 16:10 and Mac window, fullscreen and render scale (Mac-tested)
+
+**What it is.** A second widescreen mod for 16:10 screens (the MacBook, iPad at 1.43 is closer to
+4:3), beside the existing 16:9 one, and Mac host options for the window and render size.
+
+**How.** The community 16:9 Gecko code changes a set of numbers that all move with the width the
+picture gains over 4:3: the camera aspect, the 2D bounds, HUD positions in the meter and map tuning
+structures, three instruction immediates, one `lis` float, and five `lfs` loads pointed at other
+r2 pool constants. `scripts/mods/widescreen_aspect.py 16:10` interpolates each between the game's
+4:3 value and the 16:9 value (t = 0.6) and writes `mods/widescreen/GZLE01-16x10.gecko`; the pool loads
+take the nearest existing constant (all within about a pixel except one picture width, +6). The same
+script with `16:9` reproduces the original code byte for byte. `build_mods.sh` builds it as mod
+`widescreen1610` plus a `widescreen1610+betterww` combo; `build_mod_variants.py --exclusive
+widescreen,widescreen1610` lets two mods own the same chunks when they are never on together (the
+module: 3 mods, 22 chunks and 103 writes for 16:10).
+- Mac host: `BLUEWAKE_ASPECT=16:9|16:10` picks the mod and sets `DOL_AURORA_ASPECT_RATIO` (1.7778 /
+  1.6); the window is then 720 high at that aspect. RecompCore patch 0099 (backend only):
+  `DOL_AURORA_WINDOW=WxH`, `DOL_AURORA_FULLSCREEN=1`, `DOL_AURORA_RENDER_SCALE=N` (N x 480 lines, any
+  window; 0 = the window's pixels). `scripts/mac/run_host.sh` passes `ASPECT`, `WINDOW`, `FULLSCREEN`
+  and `SCALE`, and uses `build/mac-interp/composite-1610` when it exists.
+- iOS: Mods > Widescreen 16:10, exclusive with Widescreen 16:9; the launch sets the mod and 1.6.
+
+**Measured on the Mac:**
+
+| | Window | Frame buffer | Presented, Smooth Motion on |
+| --- | --- | --- | --- |
+| 16:9 windowed | 1280x720 pt | 2560x1440 | 59.8-60.0 |
+| 16:10 windowed | 1152x720 pt | 2304x1440 | 59.8-60.0 |
+| 16:10 fullscreen (MacBook) | 1728x1084 pt | 3456x2168 | 59.8-60.0 |
+| 16:10, `SCALE=3`, 800x500 window | 800x500 pt | 2304x1440 | - |
+
+At 16:10 the hearts, magic meter, rupees, minimap and item buttons sit at the edges as at 16:9; the
+pause menu, map and the no-card dialog are not stretched (the doubled Save label in the pause menu is
+the game's own animation and shows at 4:3 too). **Open.** A dark strip on the left edge is there at 4:3 as
+well (not from this change): per-pass dumps show the game's 3D pass drawing nothing in its leftmost 2
+pixels (6 at 3x), and its depth-of-field pass, drawing a half-size copy of the frame over it, widens
+that to 11 columns (about 3.7 game pixels). The device module (`build/device/composite-ios`) was
+rebuilt with the 16:10 variants, so its digests no longer match `build.sh`'s record until the next full
+build; the iOS toggle compiles but has not been run on a device.
+
+## 2026-09-28 Smooth Motion: 60 FPS from the renderer, the game still at 30 (Mac-tested)
+
+**What it is.** Wind Waker's logic advances one step per frame and waits for 1/30 s between frames
+(JFWDisplay::beginRender's waitForTick). Unlocking that wait doubles the game's speed, and the
+Meowmaritus 60 FPS hack's ~50 slow-down patches list softlocks (Niko's platforms, the Earth Temple
+slime, Molgera) and need twice the CPU the device does not have. So the game keeps its 30 steps and
+the renderer draws a frame between each pair: every gxcore draw already carries its whole transform
+state (VertexShaderConstants) with object-space vertices, so an in-between frame is the finished
+frame's passes encoded a second time with each draw's position, normal, projection and texture
+matrices and light positions blended halfway toward the same draw in the previous frame. It is real
+geometry, not image warping: depth, occlusion, lighting and the HUD are exact; motion the game makes
+by rewriting vertices on the CPU (particles, the logo swirls) stays at 30.
+
+**How** (RecompCore patch 0098, `GXRuntime/graphics/aurora/lib/gfx/frame_interp.*`):
+- A draw is keyed by a hash of its FIFO vertex payload (indices and direct attributes), or by shape
+  and texture when positions are in the payload; the Nth draw of a key pairs with the Nth last frame,
+  or the nearest plausible copy when copies change places. A pair must be plausibly one object a frame
+  apart (scale within 1.5x, under ~41 degrees of rotation, moved under a fifth of its distance + 100);
+  skinned draws check only the matrix slots their vertices use. 40 percent implausible = a camera cut:
+  that frame is shown once.
+- Copies of one model (grass clumps, bushes, palms) share a key and the game culls them one by one,
+  so a copy leaving the view shifted every later one onto its neighbour (39-277 units away, inside the
+  bound): at 60 FPS the foliage flickered while the camera turned, and one in-between frame drew a
+  palm that is in neither real frame. Draws with a unique key now vote for their motion
+  (M_now * M_before^-1, the camera's for anything standing still); a copy pairs with the previous copy
+  that motion carries onto it (within ~0.02 units), and one no still copy lands on is new in view and
+  drawn unblended. Circling the grass by the fence: every clump blended to exactly half the camera
+  step; pier and title frames unchanged; the GX worker's matching 3.48 -> 3.68 ms a game frame.
+- Blended blocks go to their own 32 MB area, uploaded once per frame, so they never split a frame's
+  staging. The render worker submits the real frame and keeps a copy, encodes the passes again with
+  the blended blocks (EFB copies and conversions included, the depth snapshot not), presents that,
+  and presents the kept copy half a game frame later from its idle loop.
+- Off by default: `aurora_set_frame_interpolation`, `DOL_AURORA_FRAME_INTERP=1`; iOS Display >
+  Smooth Motion (60 FPS). FPS counter: `aurora_set_fps_overlay` / `DOL_AURORA_SHOW_FPS=1` (top centre,
+  "60 FPS (game 30)"); the iOS Show FPS label gives the display rate too.
+- Debug: `DOL_AURORA_FRAME_INTERP_LOG`, `_TRACE=<game frame>` (per-draw outcome), `_DUMP=dir` with
+  `_FROM`/`_TO` (real and in-between images), `_DUMP_PASSES`, `_T=<weight>`.
+
+**Measured on the Mac** (M-series, the retagged device module, `scripts/mac/run_host.sh`):
+
+| | 30 FPS today | Smooth Motion |
+| --- | --- | --- |
+| Frames presented a second, title and Outset play | 29.9-30.0 | 59.8-60.0 |
+| Title flyover, draws blended | - | 99.6 % (20,159 of 20,245 in a heavy frame) |
+| New game to control, 6.4 min: control retrace, guest blocks | 20,405; 17,413,581 | the same |
+| Same route: user CPU, cycles | 195 s, 704 G | 245 s (+25 %), 874 G (+24 %) |
+| Walking the pier, sampled: GX worker / render worker | 51 % / 27 % of a core | 73 % / 53 % |
+| Game thread busy (host counter) | 79-81 % | 81-84 % |
+| Peak memory | 1.26 GB | 1.43 GB |
+
+Image checks (`scripts/mac/frame_interp_report.py`): an in-between frame differs from both neighbours
+by about half of what they differ by: the Outset intro pan 1.06 (1.0 = exactly between), Link running
+down the pier symmetric (2.97 / 2.89 of 4.34, 3.78 / 3.78 of 5.77), 76 of 76 moving title frames
+between. A standalone unit test covers matching, cuts, wraps and keys.
+
+The iOS app (arm64, iOS 17) compiles and links with it and the menu toggle. **Open.** Not yet run on a device: on an iPad Pro the extra ~half core fits beside the game thread; on
+2-performance-core iPhones it competes with it, so the GX worker's full-block copies and blends
+(only the rows a draw uses are needed) come first. One more half frame of display latency (~17 ms).
+Bone rotations over ~41 degrees a frame (a gull's wing) stay at 30. Patches 0098 and 0099 are committed in elliotttate/RecompCore
+7845b6c (chrissotraidis 2d60636 plus these), which the Builder now pins.
+
+**Also:** a Mac test save (new game to control, saved from the pause menu by `BLUEWAKE_SAVE_ROUTE`, 2
+minutes headless) at `build/mac-interp/saves/outset-start.card`; `run_host.sh ... load` plays from it at
+retrace ~705 instead of ~20,400. And `scripts/builder/build.sh` turns off the machine outliner with a
+profile: untrained game code (486 of 748 chunks from the local profile, the boat, most enemies and NPCs)
+was being outlined into a call every three instructions (45,364 in d_a_bk's first chunk).
+
 ## 2026-09-27 (day) Release fixes from the iPad test: transitions, Mods and Game Data menus
 
 **Fixed: a strip of the previous area along the bottom during transitions.** The iPad test showed the

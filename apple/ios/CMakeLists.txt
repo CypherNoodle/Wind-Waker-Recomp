@@ -32,6 +32,7 @@ set(BLUEWAKE_HOST_SOURCES
     ${BLUEWAKE_HOST_SRC}/cycle_domain.c
     ${BLUEWAKE_HOST_SRC}/delivery_digest.c
     ${BLUEWAKE_HOST_SRC}/edge_intercepts.c
+    ${BLUEWAKE_HOST_SRC}/game_options.c
     ${BLUEWAKE_HOST_SRC}/return_census.c
     ${BLUEWAKE_HOST_SRC}/interrupt_sources.c
     ${BLUEWAKE_HOST_SRC}/cold_fallback.c

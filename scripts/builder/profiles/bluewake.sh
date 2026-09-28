@@ -32,9 +32,12 @@ PROFILE_HAS_MODS=1
 PROFILE_COMPOSITE_PGO=scripts/builder/profiles/bluewake/composite-rt.profdata
 PROFILE_HOST_PGO=scripts/builder/profiles/bluewake/host.profdata
 
-RECOMPCORE_URL=https://github.com/chrissotraidis/RecompCore.git
-RECOMPCORE_SHA=2d6063614a9bc899f6b4d11c7e7b3cd66e4d96f3
-DOLRECOMP_SHA=5c91d6ed1ac7ac2f1aa6535b893eabb70f0f0d8f
+# Wind Waker Recomp builds from its own copies of BlueWake's RecompCore and
+# DolRecomp (chrissotraidis 2d60636 and 5c91d6e, each plus this fork's changes:
+# patches/recompcore/0098-0099, patches/dolrecomp/0019).
+RECOMPCORE_URL=https://github.com/elliotttate/RecompCore.git
+RECOMPCORE_SHA=7845b6c73e8d16d45f55f5ed4f8cb825785837c1
+DOLRECOMP_SHA=b8b534591cba8ca7cd43943a655ee6e2591cf5de
 DAWN_URL=https://github.com/encounter/dawn/releases/download/v20260618.032059/dawn-ios-arm64.tar.gz
 DAWN_SHA256=ada0bafc173152d80eba7c3b2f9609a71185d5809cbd5dd3251b91a0803a7ae2
 # Digest of the generated composite source (scripts/ios/composite_manifest.py)
@@ -43,17 +46,10 @@ DAWN_SHA256=ada0bafc173152d80eba7c3b2f9609a71185d5809cbd5dd3251b91a0803a7ae2
 COMPOSITE_DIGEST=54f54434c3f9c899d43a96373dc0b4c1aed0e50db8b820b9698dfa76571a770a
 
 profile_check_tools() {
-    # The mods need PyYAML and Pillow. When the Mac's python3 lacks them, use a
-    # private environment in build/ (pip may not install into Homebrew's Python).
-    if [ "$mods" -eq 1 ] && ! python3 -c 'import yaml, PIL' 2>/dev/null; then
-        local venv=$root/build/python
-        if ! "$venv/bin/python3" -c 'import yaml, PIL' 2>/dev/null; then
-            echo "installing PyYAML and Pillow into build/python for the mods"
-            run python-venv python3 -m venv "$venv"
-            run python-packages "$venv/bin/python3" -m pip install --quiet pyyaml pillow
-        fi
-        export PATH="$venv/bin:$PATH"
-    fi
+    # The mods need only python3's standard library: Better Wind Waker's
+    # settings are game options built from mods/betterww/options.txt, not its
+    # patcher (which needed PyYAML and Pillow).
+    :
 }
 
 profile_dependencies() {
@@ -151,7 +147,7 @@ profile_generate() {
     local inputs current saved
     inputs=$( { printf '%s\n' "$digest" "$mods"; shasum -a 256 \
         "$root/scripts/mods/"*.py "$root/scripts/mods/"*.sh \
-        "$root/mods/widescreen/GZLE01.gecko"; } | shasum -a 256 | awk '{print $1}')
+        "$root/mods/widescreen/"*.gecko "$root/mods/betterww/options.txt"; } | shasum -a 256 | awk '{print $1}')
     current=""
     if [ -d "$out/composite-src" ]; then
         current=$(python3 scripts/ios/composite_manifest.py "$out/composite-src" | awk '{print $1}')
@@ -176,17 +172,16 @@ profile_generate() {
 }
 
 profile_mods() {
-    # Widescreen, Better Wind Waker and both together, as variants compiled
-    # into the same module (docs/MODS.md). Done once per composite source.
-    if [ "$(cat "$out/mods.done" 2>/dev/null || true)" = complete ] && \
-       [ -f "$out/mods/betterww.iso" ]; then
+    # Widescreen, Better Wind Waker's options and both together, as variants
+    # compiled into the same module (docs/MODS.md). Done once per composite source.
+    if [ "$(cat "$out/mods.done" 2>/dev/null || true)" = complete ]; then
         echo "mods already in $out/composite-src"
         return
     fi
     run mods scripts/mods/build_mods.sh "$out" "$iso"
     python3 scripts/ios/composite_manifest.py "$out/composite-src" | awk '{print $1}' > "$out/composite-final.digest"
     printf '%s\n' complete > "$out/mods.done"
-    echo "widescreen and Better Wind Waker variants added; the patched disc for the device is $out/mods/betterww.iso"
+    echo "widescreen and Better Wind Waker variants added"
 }
 
 profile_train() {

@@ -19,6 +19,7 @@
 #include "ipl_sram.h"
 #include "card_runtime.h"
 #include "edge_intercepts.h"
+#include "game_options.h"
 #include "callback_delivery.h"
 #include "cycle_domain.h"
 #include "interrupt_sources.h"
@@ -458,6 +459,10 @@ typedef struct BluewakePadScriptPress {
     bool has_stick;
     s8 stick_x;
     s8 stick_y;
+    // And the C-stick (retrace:buttons:length:x:y:cx:cy), for the camera.
+    bool has_substick;
+    s8 substick_x;
+    s8 substick_y;
 } BluewakePadScriptPress;
 static BluewakePadScriptPress g_pad_script[BLUEWAKE_PAD_SCRIPT_MAX];
 static unsigned g_pad_script_count;
@@ -669,6 +674,8 @@ typedef void (*ModWriteFn)(void* user, u32 address, const u8* bytes, u32 size);
 typedef u32 (*ModWritesFn)(u32 mask, u32 per_frame_only, ModWriteFn fn, void* user);
 static ModWritesFn g_mod_writes;
 static u32 g_mod_mask;
+// Whether the mod that carries the game options' sites is on (game_options.h).
+static bool g_options_mod;
 
 static void host_mod_write(void* user, u32 address, const u8* bytes, u32 size) {
     // Through the guest accessor, as the REL data images are materialized:
@@ -706,6 +713,24 @@ static void host_mods_enable(void* lib, CPUState* cpu) {
         }
         if (on)
             g_mod_mask |= 1u << i;
+        if (on && strcmp(mod, "betterww") == 0)
+            g_options_mod = true;
+    }
+    // The two widescreen mods patch the same code for different shapes; the
+    // composite has no variant for both. 16:10 wins over 16:9 if asked for both.
+    int ws169 = -1, ws1610 = -1;
+    for (u32 i = 0; i < available && name != NULL; ++i) {
+        const char* mod = name(i);
+        if (mod != NULL && strcmp(mod, "widescreen") == 0) ws169 = (int)i;
+        if (mod != NULL && strcmp(mod, "widescreen1610") == 0) ws1610 = (int)i;
+    }
+    if (ws169 >= 0 && ws1610 >= 0 && (g_mod_mask & (1u << ws169)) && (g_mod_mask & (1u << ws1610))) {
+        fprintf(stderr, "[mods] widescreen and widescreen1610 are exclusive; keeping widescreen1610\n");
+        g_mod_mask &= ~(1u << ws169);
+    }
+    for (u32 i = 0; i < available && name != NULL; ++i) {
+        const char* mod = name(i);
+        const bool on = (g_mod_mask & (1u << i)) != 0u;
         snprintf(list + strlen(list), sizeof list - strlen(list), "%s%s%s",
                  i ? "," : "", mod ? mod : "?", on ? "+" : "");
     }
@@ -3386,6 +3411,10 @@ static DolPadState host_pad_state(u32 channel, const DolPadState* source) {
                 g_host_retrace_count < press->start_retrace + press->length) {
                 result.stick_x = press->stick_x;
                 result.stick_y = press->stick_y;
+                if (press->has_substick) {
+                    result.substick_x = press->substick_x;
+                    result.substick_y = press->substick_y;
+                }
                 break;
             }
         }
@@ -4660,6 +4689,7 @@ static void host_sync_vi_cycles(CPUState* cpu) {
         g_host_retrace_count++;
         aurora_backend_service_present();
         host_mods_reapply(cpu);
+        bluewake_game_options_retrace(cpu);
         if (g_wall_pace_enabled)
             host_wall_pace(g_host_retrace_count);
         if (g_perf_log_enabled)
@@ -5372,12 +5402,26 @@ static bool configure_virtual_pad(DolHeadlessBackend* backend) {
                 }
                 has_stick = ok;
             }
+            long substick_x = 0, substick_y = 0;
+            bool has_substick = false;
+            if (ok && has_stick && *end == ':') {
+                cursor = end + 1;
+                substick_x = strtol(cursor, &end, 0);
+                ok = end != cursor && *end == ':';
+                if (ok) {
+                    cursor = end + 1;
+                    substick_y = strtol(cursor, &end, 0);
+                    ok = end != cursor && substick_x >= -128 && substick_x <= 127 &&
+                         substick_y >= -128 && substick_y <= 127;
+                }
+                has_substick = ok;
+            }
             if (ok)
                 ok = (*end == '\0' || *end == ',') && length > 0u;
             if (!ok) {
                 fprintf(stderr,
                         "invalid BLUEWAKE_PAD_SCRIPT=\"%s\"; expected "
-                        "retrace:buttons:length[:stick_x:stick_y] entries "
+                        "retrace:buttons:length[:stick_x:stick_y[:cstick_x:cstick_y]] entries "
                         "separated by ','\n",
                         pad_script_env);
                 return false;
@@ -5390,6 +5434,9 @@ static bool configure_virtual_pad(DolHeadlessBackend* backend) {
             press->has_stick = has_stick;
             press->stick_x = (s8)stick_x;
             press->stick_y = (s8)stick_y;
+            press->has_substick = has_substick;
+            press->substick_x = (s8)substick_x;
+            press->substick_y = (s8)substick_y;
             cursor = (*end == ',') ? end + 1 : end;
         }
         fprintf(stderr, "[pad] script armed %u scheduled press(es)\n",
@@ -5553,7 +5600,37 @@ static void host_apply_default_env(const char* name, const char* root,
     (void)setenv(name, probe, 0);
 }
 
+/* BLUEWAKE_ASPECT: the picture's shape. 4:3 is the game's own; 16:10 and 16:9
+   turn on the matching widescreen mod (a wider camera, culling and HUD) and
+   ask the renderer for a frame buffer of that shape (DOL_AURORA_ASPECT_RATIO),
+   which also sizes the window unless DOL_AURORA_WINDOW does. Explicit
+   BLUEWAKE_MODS or DOL_AURORA_ASPECT_RATIO settings are kept. */
+static void host_apply_aspect(void) {
+    const char* aspect = getenv("BLUEWAKE_ASPECT");
+    if (aspect == NULL || aspect[0] == '\0' || strcmp(aspect, "4:3") == 0)
+        return;
+    const char* mod = NULL;
+    const char* ratio = NULL;
+    if (strcmp(aspect, "16:10") == 0) {
+        mod = "widescreen1610";
+        ratio = "1.6";
+    } else if (strcmp(aspect, "16:9") == 0) {
+        mod = "widescreen";
+        ratio = "1.7778";
+    } else {
+        fprintf(stderr, "[aspect] unknown BLUEWAKE_ASPECT=%s (4:3, 16:10 or 16:9); keeping 4:3\n", aspect);
+        return;
+    }
+    setenv("DOL_AURORA_ASPECT_RATIO", ratio, 0);
+    const char* mods = getenv("BLUEWAKE_MODS");
+    char list[256];
+    snprintf(list, sizeof list, "%s%s%s", mods && mods[0] ? mods : "", mods && mods[0] ? "," : "", mod);
+    setenv("BLUEWAKE_MODS", list, 1);
+    fprintf(stderr, "[aspect] %s: mod %s, frame buffer %s\n", aspect, mod, getenv("DOL_AURORA_ASPECT_RATIO"));
+}
+
 int main(int argc, char** argv) {
+    host_apply_aspect();
     const char* host_root = host_resolve_root();
     char dylib_scratch[4096 + 128];
     const char* dylib_path = argc > 1 ? argv[1] : NULL;
@@ -6375,6 +6452,7 @@ int main(int argc, char** argv) {
             set_edge_service(host_chassis_edge_service, &cpu);
     }
     host_mods_enable(lib, &cpu);
+    bluewake_game_options_enable(lib, &cpu, g_options_mod);
 
     unsigned long long blocks = 0;
     const char* stop_reason = NULL;

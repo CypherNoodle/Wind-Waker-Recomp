@@ -30,7 +30,6 @@
 
 #include "first_run.h"
 #include "controller_settings.h"
-#include <CommonCrypto/CommonDigest.h>
 #include "touch_controls.h"
 
 int bluewake_host_main(int argc, char** argv);
@@ -39,56 +38,6 @@ static void bw_default(const char* name, NSString* value) {
     const char* existing = getenv(name);
     if (existing != NULL && existing[0] != '\0') return;
     setenv(name, value.fileSystemRepresentation, 1);
-}
-
-// SHA-1 of the executable inside a GameCube disc image (its offset is at 0x420
-// of the disc header; the DOL's size is the end of its furthest section), or
-// nil if the file is missing or not a disc. Also used by the ⋯ menu's Better
-// Wind Waker installer (BWGameOverlay.mm).
-NSString* bw_iso_dol_sha1(NSString* path);
-NSString* bw_iso_dol_sha1(NSString* path) {
-    NSFileHandle* f = [NSFileHandle fileHandleForReadingAtPath:path];
-    if (f == nil)
-        return nil;
-    NSString* result = nil;
-    @try {
-        [f seekToFileOffset:0x420];
-        NSData* off = [f readDataOfLength:4];
-        if (off.length == 4) {
-            const uint8_t* o = off.bytes;
-            const uint64_t dol = ((uint32_t)o[0] << 24) | ((uint32_t)o[1] << 16) | ((uint32_t)o[2] << 8) | o[3];
-            [f seekToFileOffset:dol];
-            NSData* hdr = [f readDataOfLength:0x100];
-            if (hdr.length == 0x100) {
-                const uint8_t* h = hdr.bytes;
-                uint32_t size = 0x100;
-                for (int i = 0; i < 18; i++) {
-                    const uint8_t* p = h + i * 4;
-                    const uint8_t* q = h + 0x90 + i * 4;
-                    const uint32_t so = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | p[3];
-                    const uint32_t ss = ((uint32_t)q[0] << 24) | ((uint32_t)q[1] << 16) | ((uint32_t)q[2] << 8) | q[3];
-                    if (ss != 0 && so + ss > size)
-                        size = so + ss;
-                }
-                if (size < (16u << 20)) {
-                    [f seekToFileOffset:dol];
-                    NSData* bytes = [f readDataOfLength:size];
-                    if (bytes.length == size) {
-                        uint8_t digest[CC_SHA1_DIGEST_LENGTH];
-                        CC_SHA1(bytes.bytes, (CC_LONG)bytes.length, digest);
-                        NSMutableString* hex = [NSMutableString string];
-                        for (int i = 0; i < CC_SHA1_DIGEST_LENGTH; i++)
-                            [hex appendFormat:@"%02x", digest[i]];
-                        result = hex;
-                    }
-                }
-            }
-        }
-    } @catch (NSException* e) {
-        result = nil;
-    }
-    [f closeFile];
-    return result;
 }
 
 static void bw_default_if_exists(const char* name, NSString* path) {
@@ -206,12 +155,15 @@ int main(int argc, char** argv) {
         if ([[NSUserDefaults standardUserDefaults] integerForKey:@"BlueWake.AspectMode"] == 1)
             bw_default("DOL_AURORA_ASPECT_FIT", @"0");
         // Mods (the Mods menu in BWGameOverlay.mm), applied at launch. The
-        // widescreen code renders anamorphic 16:9, so the picture is
-        // letterboxed to 16:9 whatever the aspect setting.
+        // widescreen code renders anamorphic 16:9 (or 16:10), so the picture
+        // is letterboxed to that shape whatever the aspect setting.
         {
             NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
             NSMutableArray<NSString*>* mods = [NSMutableArray array];
-            if ([d boolForKey:@"BlueWake.Mod.Widescreen"]) {
+            if ([d boolForKey:@"BlueWake.Mod.Widescreen1610"]) {
+                [mods addObject:@"widescreen1610"];
+                bw_default("DOL_AURORA_ASPECT_RATIO", @"1.6");
+            } else if ([d boolForKey:@"BlueWake.Mod.Widescreen"]) {
                 [mods addObject:@"widescreen"];
                 bw_default("DOL_AURORA_ASPECT_RATIO", @"1.7778");
             }
@@ -222,22 +174,21 @@ int main(int argc, char** argv) {
                                                        attributes:nil error:nil];
             if ([d boolForKey:@"BlueWake.Mod.HDTextures"])
                 bw_default("DOL_AURORA_TEXTURE_PACK", pack);
-            // Better Wind Waker: the disc it patched (Documents/BlueWake/Mods/
-            // betterww.iso) supplies its archives and messages, and its code
-            // runs from the composite's variants, which match one exact
-            // patched executable; any other disc is refused.
-            NSString* bww = [data stringByAppendingPathComponent:@"Mods/betterww.iso"];
-            [[NSFileManager defaultManager] createDirectoryAtPath:[bww stringByDeletingLastPathComponent]
-                                      withIntermediateDirectories:YES attributes:nil error:nil];
+            // Better Wind Waker's settings (game options: mods/betterww/
+            // options.txt, runtime/host/src/game_options.c): the mod carries
+            // their code, and each setting the player changed from its default
+            // in Mods > Better Wind Waker Settings is passed as name or -name.
             if ([d boolForKey:@"BlueWake.Mod.BetterWW"]) {
-                NSString* sha = bw_iso_dol_sha1(bww);
-                if ([sha isEqualToString:@BW_BETTERWW_DOL_SHA1]) {
-                    [mods addObject:@"betterww"];
-                    setenv("BLUEWAKE_DISC", bww.fileSystemRepresentation, 1);
-                } else {
-                    fprintf(stderr, "[mods] betterww disc %s (%s); not enabled\n",
-                            sha ? "does not match" : "missing", sha ? sha.UTF8String : bww.UTF8String);
+                [mods addObject:@"betterww"];
+                NSMutableArray<NSString*>* options = [NSMutableArray array];
+                for (NSString* key in [[d dictionaryRepresentation] allKeys]) {
+                    if (![key hasPrefix:@BW_OPTION_KEY_PREFIX])
+                        continue;
+                    NSString* name = [key substringFromIndex:strlen(BW_OPTION_KEY_PREFIX)];
+                    [options addObject:[d boolForKey:key] ? name : [@"-" stringByAppendingString:name]];
                 }
+                if (options.count > 0)
+                    bw_default("BLUEWAKE_OPTIONS", [options componentsJoinedByString:@","]);
             }
             if (mods.count > 0)
                 bw_default("BLUEWAKE_MODS", [mods componentsJoinedByString:@","]);

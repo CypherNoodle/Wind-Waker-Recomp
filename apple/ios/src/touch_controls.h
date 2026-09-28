@@ -51,6 +51,9 @@ void bluewake_touch_clear(void);
 // The last second's presented frames per second, game speed in percent of
 // full speed, and longest gap between presents (for the FPS display).
 void bluewake_fps_read(float* shown, float* speed, float* worst_ms);
+// Frames reaching the display a second, in-between frames included (equal to
+// the shown count when Display > Smooth Motion is off).
+float bluewake_fps_display(void);
 void bluewake_pause_set(unsigned reason, bool on);
 unsigned bluewake_pause_reasons(void);
 

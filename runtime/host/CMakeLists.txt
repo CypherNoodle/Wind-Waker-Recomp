@@ -30,6 +30,7 @@ add_executable(bluewake_host
     src/cycle_domain.c
     src/delivery_digest.c
     src/edge_intercepts.c
+    src/game_options.c
     src/return_census.c
     src/interrupt_sources.c
     src/cold_fallback.c
@@ -200,6 +201,7 @@ add_test(NAME bluewake_card_runtime_test COMMAND bluewake_card_runtime_test)
 add_executable(bluewake_edge_intercepts_test
     ../../tests/edge_intercepts_test.c
     src/edge_intercepts.c
+    src/game_options.c
     src/card_runtime.c)
 target_link_libraries(bluewake_edge_intercepts_test PRIVATE gxruntime)
 target_include_directories(bluewake_edge_intercepts_test PRIVATE

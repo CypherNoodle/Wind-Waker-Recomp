@@ -11,6 +11,7 @@
 //     app is inactive or a menu, settings panel, layout editor or alert is
 //     open, and resumes only when no reason remains (PRD FR-014/FR-015).
 #include <SDL3/SDL_events.h>
+#include <aurora/gfx.h>
 #include <dolphin/pad.h>
 
 #include <algorithm>
@@ -305,6 +306,8 @@ extern "C" void bluewake_pause_set(unsigned reason, bool on) {
 }
 
 extern "C" unsigned bluewake_pause_reasons(void) { return g_pause_reasons.load(); }
+
+extern "C" float bluewake_fps_display(void) { return aurora_get_fps(); }
 
 extern "C" void bluewake_fps_read(float* shown, float* speed, float* worst_ms) {
     *shown = g_fps_shown.load();

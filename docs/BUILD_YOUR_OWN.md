@@ -110,10 +110,9 @@ BlueWake slot for it; your current saves are backed up first. USA saves only.
 
 ## Mods
 
-The build includes the Widescreen and Better Wind Waker code mods (`--no-mods` leaves them out). Better
-Wind Waker also needs a patched disc, which the build writes to `build/device/mods/betterww.iso`: copy it
-to the device and use **⋯ › Mods › Install Better Wind Waker…**. See [MODS.md](MODS.md).
-With a custom `--out`, the patched disc is in that directory's `mods/betterww.iso`.
+The build includes the Widescreen (16:9 and 16:10) and Better Wind Waker mods (`--no-mods` leaves them
+out). Better Wind Waker's settings are built in: turn it on in **⋯ › Mods** and choose its settings in
+**⋯ › Mods › Better Wind Waker Settings**. No patched disc is needed. See [MODS.md](MODS.md).
 
 ## If something fails
 

@@ -28,9 +28,10 @@
 
 #define BW_GITHUB_URL "https://github.com/chrissotraidis/bluewake"
 
-// SHA-1 of a disc image's game code, the check launch uses for Better Wind
-// Waker (ios_entry.m); nil when the file is not a GameCube disc.
-extern "C" NSString* bw_iso_dol_sha1(NSString* path);
+// The game options the game module offers (runtime/host/src/game_options.h):
+// Better Wind Waker's settings.
+extern "C" const char* bluewake_game_options_describe(uint32_t position, const char** title, bool* default_on,
+                                                      bool* on);
 
 // SDL's own entry points for a hardware keyboard (src/events/SDL_keyboard_c.h),
 // linked from the static SDL; used only by the BLUEWAKE_KEY_TAPS test hook.
@@ -256,6 +257,7 @@ static void BWDumpMenu(UIMenuElement* element, int depth) {
         NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
         _launchMods = @{
             @BW_MOD_WIDESCREEN_KEY : @([d boolForKey:@BW_MOD_WIDESCREEN_KEY]),
+            @BW_MOD_WIDESCREEN_1610_KEY : @([d boolForKey:@BW_MOD_WIDESCREEN_1610_KEY]),
             @BW_MOD_HD_TEXTURES_KEY : @([d boolForKey:@BW_MOD_HD_TEXTURES_KEY]),
             @BW_MOD_BETTERWW_KEY : @([d boolForKey:@BW_MOD_BETTERWW_KEY]),
         };
@@ -311,7 +313,12 @@ static void BWDumpMenu(UIMenuElement* element, int depth) {
 - (void)updateFPSLabel {
     float shown = 0, speed = 0, worst = 0;
     bluewake_fps_read(&shown, &speed, &worst);
-    _fpsLabel.text = [NSString stringWithFormat:@"%.0f FPS · %.0f%% speed · %.0f ms", shown, speed, worst];
+    const float display = bluewake_fps_display();
+    if (display > shown + 5.0f)
+        _fpsLabel.text = [NSString stringWithFormat:@"%.0f FPS (game %.0f) · %.0f%% speed · %.0f ms", display, shown,
+                                                    speed, worst];
+    else
+        _fpsLabel.text = [NSString stringWithFormat:@"%.0f FPS · %.0f%% speed · %.0f ms", shown, speed, worst];
     _fpsLabel.textColor = shown < 27.0f || speed < 95.0f ? [UIColor colorWithRed:1.0 green:0.8 blue:0.3 alpha:1.0]
                                                          : UIColor.whiteColor;
 }
@@ -480,8 +487,23 @@ static void BWDumpMenu(UIMenuElement* element, int depth) {
         [weakSelf refreshMenu];
     }];
     showFPS.state = BWBoolDefault(kShowFPSKey, NO) ? UIMenuElementStateOn : UIMenuElementStateOff;
+    // Smooth motion: the renderer draws an in-between frame for each of the
+    // game's 30, so the display shows 60 (applies at once; the game's own
+    // speed and logic are unchanged).
+    UIAction* smoothMotion = [UIAction actionWithTitle:@"Smooth Motion (60 FPS)"
+                                                 image:[UIImage systemImageNamed:@"wind"]
+                                            identifier:nil handler:^(__kindof UIAction* a) {
+        (void)a;
+        NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
+        [d setBool:![d boolForKey:@BW_FRAME_INTERP_KEY] forKey:@BW_FRAME_INTERP_KEY];
+        bluewake_settings_changed();
+        [weakSelf refreshMenu];
+    }];
+    smoothMotion.subtitle = @"Experimental: draws a frame between each of the game's";
+    smoothMotion.state = [defaults boolForKey:@BW_FRAME_INTERP_KEY] ? UIMenuElementStateOn : UIMenuElementStateOff;
     UIMenu* displayMenu = [UIMenu menuWithTitle:@"Display" image:[UIImage systemImageNamed:@"display"]
-                                     identifier:nil options:0 children:@[ showFPS, resolutionMenu, filteringMenu, aspectMenu ]];
+                                     identifier:nil options:0
+                                       children:@[ showFPS, smoothMotion, resolutionMenu, filteringMenu, aspectMenu ]];
 
     // Controller: camera stick direction and face-button mapping.
     UIAction* (^toggle)(NSString*, const char*) = ^UIAction*(NSString* title, const char* key) {
@@ -598,10 +620,6 @@ static NSUInteger g_packFiles = NSNotFound;
     return [[self dataDirectory] stringByAppendingPathComponent:@"Load/Textures/GZLE01"];
 }
 
-- (NSString*)betterWWDiscPath {
-    return [[self dataDirectory] stringByAppendingPathComponent:@"Mods/betterww.iso"];
-}
-
 // "On", "Off", or the change waiting for the next launch.
 - (NSString*)modState:(NSString*)key {
     const BOOL now = [[NSUserDefaults standardUserDefaults] boolForKey:key];
@@ -620,6 +638,13 @@ static NSUInteger g_packFiles = NSNotFound;
             (void)a;
             NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
             [d setBool:![d boolForKey:key] forKey:key];
+            // One widescreen shape at a time: the two patch the same code.
+            NSDictionary<NSString*, NSString*>* other = @{
+                @BW_MOD_WIDESCREEN_KEY : @BW_MOD_WIDESCREEN_1610_KEY,
+                @BW_MOD_WIDESCREEN_1610_KEY : @BW_MOD_WIDESCREEN_KEY,
+            };
+            if ([d boolForKey:key] && other[key] != nil)
+                [d setBool:NO forKey:other[key]];
             [weakSelf refreshMenu];
             UIAlertController* alert = [UIAlertController
                 alertControllerWithTitle:@"Applies Next Launch"
@@ -645,13 +670,13 @@ static NSUInteger g_packFiles = NSNotFound;
     NSString* packDetail = g_packFiles > 0
         ? [NSString stringWithFormat:@"%lu textures installed", (unsigned long)g_packFiles]
         : @"No pack installed yet";
-    NSString* bwwDetail = [[NSFileManager defaultManager] fileExistsAtPath:[self betterWWDiscPath]]
-        ? @"Swift Sail, faster text and more"
-        : @"Needs the patched disc";
+    NSString* bwwDetail = @"Swift Sail, instant text and more";
     UIMenu* toggles = [UIMenu menuWithTitle:@"" image:nil identifier:nil options:UIMenuOptionsDisplayInline
                                    children:@[
         modToggle(@"Widescreen 16:9", @"Shows more of the world on wide screens", @"rectangle.expand.vertical",
                   @BW_MOD_WIDESCREEN_KEY),
+        modToggle(@"Widescreen 16:10", @"For 16:10 screens, such as a Mac or an iPad", @"rectangle.expand.vertical",
+                  @BW_MOD_WIDESCREEN_1610_KEY),
         modToggle(@"HD Texture Pack", packDetail, @"photo.stack", @BW_MOD_HD_TEXTURES_KEY),
         modToggle(@"Better Wind Waker", bwwDetail, @"sailboat", @BW_MOD_BETTERWW_KEY),
     ]];
@@ -662,23 +687,57 @@ static NSUInteger g_packFiles = NSNotFound;
         [weakSelf chooseTexturePack];
     }];
     installPack.subtitle = @"Pick a folder of PNG or DDS textures";
-    UIAction* installBWW = [UIAction actionWithTitle:@"Install Better Wind Waker…"
-                                               image:[UIImage systemImageNamed:@"square.and.arrow.down"]
-                                          identifier:nil handler:^(__kindof UIAction* a) {
-        (void)a;
-        [weakSelf chooseBetterWWDisc];
-    }];
-    installBWW.subtitle = @"Pick the patched disc image (.iso)";
-    UIAction* howBWW = [UIAction actionWithTitle:@"How Better Wind Waker Works"
-                                           image:[UIImage systemImageNamed:@"info.circle"]
-                                      identifier:nil handler:^(__kindof UIAction* a) {
-        (void)a;
-        [weakSelf explainBetterWW];
-    }];
     UIMenu* add = [UIMenu menuWithTitle:@"Add Mods" image:nil identifier:nil options:UIMenuOptionsDisplayInline
-                               children:@[ installPack, installBWW, howBWW ]];
+                               children:@[ installPack ]];
+    NSMutableArray<UIMenuElement*>* children = [NSMutableArray arrayWithObjects:toggles, add, nil];
+    UIMenu* bww = [self betterWWSettingsMenu];
+    if (bww != nil)
+        [children insertObject:bww atIndex:1];
     return [UIMenu menuWithTitle:@"Mods" image:[UIImage systemImageNamed:@"wand.and.stars"] identifier:nil options:0
-                        children:@[ toggles, add ]];
+                        children:children];
+}
+
+// Better Wind Waker's settings, one switch each, from the game module's
+// option table. A switch the player changes is stored under
+// BW_OPTION_KEY_PREFIX + its name and applies at the next launch (ios_entry.m
+// passes it as BLUEWAKE_OPTIONS); the settings need Better Wind Waker on.
+- (UIMenu*)betterWWSettingsMenu {
+    __weak BWGameOverlay* weakSelf = self;
+    NSMutableArray<UIMenuElement*>* items = [NSMutableArray array];
+    const BOOL modOn = [[NSUserDefaults standardUserDefaults] boolForKey:@BW_MOD_BETTERWW_KEY];
+    for (uint32_t i = 0;; ++i) {
+        const char* title = NULL;
+        bool defaultOn = false, running = false;
+        const char* cname = bluewake_game_options_describe(i, &title, &defaultOn, &running);
+        if (cname == NULL)
+            break;
+        NSString* name = @(cname);
+        NSString* key = [@BW_OPTION_KEY_PREFIX stringByAppendingString:name];
+        NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
+        const BOOL on = [d objectForKey:key] != nil ? [d boolForKey:key] : defaultOn;
+        UIAction* action = [UIAction actionWithTitle:@(title ?: cname) image:nil identifier:nil
+                                             handler:^(__kindof UIAction* a) {
+            (void)a;
+            NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+            [defaults setBool:!on forKey:key];
+            // Swift Sail and Brisk Sail are two tunings of one sail.
+            NSDictionary<NSString*, NSString*>* other = @{@"swift_sail" : @"brisk_sail",
+                                                          @"brisk_sail" : @"swift_sail"};
+            if (!on && other[name] != nil)
+                [defaults setBool:NO forKey:[@BW_OPTION_KEY_PREFIX stringByAppendingString:other[name]]];
+            [weakSelf refreshMenu];
+        }];
+        action.state = on ? UIMenuElementStateOn : UIMenuElementStateOff;
+        if (modOn && on != running)
+            action.subtitle = on ? @"On at next launch" : @"Off at next launch";
+        [items addObject:action];
+    }
+    if (items.count == 0)
+        return nil;
+    UIMenu* menu = [UIMenu menuWithTitle:@"Better Wind Waker Settings" image:[UIImage systemImageNamed:@"slider.horizontal.3"]
+                              identifier:nil options:0 children:items];
+    menu.subtitle = modOn ? @"Apply at next launch" : @"Turn on Better Wind Waker to use them";
+    return menu;
 }
 
 // ---------------------------------------------------------------- files
@@ -818,95 +877,6 @@ static NSUInteger g_packFiles = NSNotFound;
                                                                                            (unsigned long)failed]
                                                               : @""];
         [weakSelf offerToTurnOn:@BW_MOD_HD_TEXTURES_KEY title:@"Texture Pack Installed" message:message];
-    }];
-}
-
-- (void)explainBetterWW {
-    UIAlertController* alert = [UIAlertController
-        alertControllerWithTitle:@"Better Wind Waker"
-                         message:@"Better Wind Waker is a patched copy of your disc, made on a computer. Patch your "
-                                 @"USA Wind Waker disc with BlueWake's script (scripts/mods/make_betterww_iso.sh, "
-                                 @"Better Wind Waker's default settings), copy the result to your iPad, then use "
-                                 @"Install Better Wind Waker.\n\nBlueWake checks the patched game code against the "
-                                 @"build it includes and only installs that disc."
-                  preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[self actionTitled:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[self actionTitled:@"Better Wind Waker on GitHub" style:UIAlertActionStyleDefault handler:^{
-        [UIApplication.sharedApplication openURL:[NSURL URLWithString:@"https://github.com/WideBoner/betterww"]
-                                         options:@{} completionHandler:nil];
-    }]];
-    [alert addAction:[self actionTitled:@"BlueWake's Script on GitHub" style:UIAlertActionStyleDefault handler:^{
-        [UIApplication.sharedApplication
-                  openURL:[NSURL URLWithString:@BW_GITHUB_URL "/blob/main/scripts/mods/make_betterww_iso.sh"]
-                  options:@{} completionHandler:nil];
-    }]];
-    [self presentAlert:alert];
-}
-
-- (void)chooseBetterWWDisc {
-    __weak BWGameOverlay* weakSelf = self;
-    UIDocumentPickerViewController* picker =
-        [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[ UTTypeData ] asCopy:NO];
-    [self presentPicker:picker handler:^(NSArray<NSURL*>* urls) { [weakSelf installBetterWWFrom:urls.firstObject]; }];
-}
-
-// Copies the picked disc beside Mods/betterww.iso, checks its game code the way
-// launch does (bw_iso_dol_sha1), and only then puts it in place.
-- (void)installBetterWWFrom:(NSURL*)source {
-    __weak BWGameOverlay* weakSelf = self;
-    NSString* dest = [self betterWWDiscPath];
-    NSString* part = [dest stringByAppendingString:@".part"];
-    const BOOL scoped = [source startAccessingSecurityScopedResource];
-    __block NSString* copyError = nil;
-    __block NSString* sha = nil;
-    __block BOOL installed = NO;
-    [self waitTitled:@"Installing Better Wind Waker" message:@"Copying the disc image. This can take a minute."
-                work:^(UIAlertController* wait) {
-        (void)wait;
-        NSFileManager* fm = [NSFileManager new];
-        [fm createDirectoryAtPath:[dest stringByDeletingLastPathComponent] withIntermediateDirectories:YES
-                       attributes:nil error:nil];
-        [fm removeItemAtPath:part error:nil];
-        NSError* error = nil;
-        if (![fm copyItemAtPath:source.path toPath:part error:&error]) {
-            copyError = error.localizedDescription ?: @"The copy failed.";
-            return;
-        }
-        sha = bw_iso_dol_sha1(part);
-        if ([sha isEqualToString:@BW_BETTERWW_DOL_SHA1]) {
-            [fm removeItemAtPath:dest error:nil];
-            installed = [fm moveItemAtPath:part toPath:dest error:&error];
-            if (installed)
-                [[NSURL fileURLWithPath:dest] setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:nil];
-            else
-                copyError = error.localizedDescription ?: @"The disc image could not be saved.";
-        }
-        [fm removeItemAtPath:part error:nil];
-    } done:^{
-        if (scoped)
-            [source stopAccessingSecurityScopedResource];
-        fprintf(stderr, "[mods] betterww install: %s (%s)\n", installed ? "installed" : "refused",
-                sha ? sha.UTF8String : "no disc code");
-        [weakSelf refreshMenu];
-        if (installed) {
-            [weakSelf offerToTurnOn:@BW_MOD_BETTERWW_KEY title:@"Better Wind Waker Installed"
-                            message:@"This is the patched disc BlueWake supports. Better Wind Waker starts the "
-                                    @"next time BlueWake starts."];
-            return;
-        }
-        NSString* title = copyError ? @"Could Not Install" : @"Not the Supported Disc";
-        NSString* message = copyError
-            ? [NSString stringWithFormat:@"The disc image could not be copied: %@", copyError]
-            : sha == nil ? @"That file is not a GameCube disc image. Nothing was installed."
-                         : @"That disc is not the Better Wind Waker build BlueWake supports, so it was not "
-                           @"installed. Make it with BlueWake's script from a USA Wind Waker disc.";
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:title message:message
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[weakSelf actionTitled:@"OK" style:UIAlertActionStyleCancel handler:nil]];
-        [alert addAction:[weakSelf actionTitled:@"How It Works" style:UIAlertActionStyleDefault handler:^{
-            [weakSelf explainBetterWW];
-        }]];
-        [weakSelf presentAlert:alert];
     }];
 }
 
@@ -1291,9 +1261,11 @@ static NSString* BWQuestLogSummary(const BWQuestLog& log) {
                              [fm fileExistsAtPath:[dir stringByAppendingPathComponent:name]] ? @"present" : @"missing"];
     [report appendFormat:@"Controllers: %lu\n", (unsigned long)GCController.controllers.count];
     NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
-    [report appendFormat:@"Render scale: %@, anisotropy: %ld, aspect: %ld, camera invert x=%d y=%d, buttons remapped: %d\n",
+    [report appendFormat:@"Render scale: %@, anisotropy: %ld, smooth motion: %d, aspect: %ld, camera invert x=%d y=%d, "
+                          "buttons remapped: %d\n",
                          [d objectForKey:@BW_RENDER_SCALE_KEY] ?: @"3 (default)",
-                         (long)MAX((NSInteger)1, [d integerForKey:@BW_ANISOTROPY_KEY]), (long)[d integerForKey:BWAspectModeKey],
+                         (long)MAX((NSInteger)1, [d integerForKey:@BW_ANISOTROPY_KEY]),
+                         [d boolForKey:@BW_FRAME_INTERP_KEY], (long)[d integerForKey:BWAspectModeKey],
                          [d boolForKey:@BW_INVERT_CAMERA_X_KEY], [d boolForKey:@BW_INVERT_CAMERA_Y_KEY],
                          [d dictionaryForKey:@BW_BUTTON_MAP_KEY] != nil];
     [report appendFormat:@"Thermal state: %ld, Low Power Mode: %d\n",
