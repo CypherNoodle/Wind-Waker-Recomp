@@ -1,3 +1,36 @@
+## 2026-09-28 Mac mouse camera, and in-between frames through fast turns (Mac-tested)
+
+**Mouse camera** (`runtime/host/src/mouse_camera.c`, the Mac host). Click the window to hand it the
+mouse: moving it turns the camera around Link and tilts it, and left click is A; Esc, or leaving the
+window, gives it back. It turns the game's own camera, not the C-stick (whose vertical axis is the
+first-person view and a pull-back, not a tilt, and whose horizontal speed the game eases): at
+camera_draw's entry (a chassis edge at 0x8017C350), when the frame's camera is final, the mouse's
+yaw and pitch go into dCamera_c's view cache (the next frame starts from them) and into the view's
+eye for this frame, at the distance the game chose (walls push it in). From its first move the mouse
+owns the angles, since the follow camera eases the tilt back and the yaw behind Link and its wall
+check and smoothing move the eye after that; a cutscene, a door, Z-targeting or first person hands
+the camera back. 0.18 degrees a point (`BLUEWAKE_MOUSE_SENSITIVITY`, `run_host.sh MOUSE_SENSITIVITY=`),
+tilt -35 to 75 degrees, `BLUEWAKE_MOUSE_INVERT_Y`. Checked with scripted pointer motion
+(`BLUEWAKE_MOUSE_TEST`, `BLUEWAKE_MOUSE_TRACE`): every frame drawn at the mouse's angles while Link
+walks and a wall pulls the camera in (97 units and back), and a roll does not interrupt it.
+The game's layout used: the camera at 0x803CA718 (+0x244 dCamera_c, view at +0, mLookat +0xD8),
+mViewCache at +0x3C (the decomp's comment says 0x5C; the globe's radius equals |eye - center| at 0x3C).
+
+**In-between frames through fast turns** (RecompCore 21775f1, patch 0100). A mouse turn of more than
+about 11 degrees a game frame moved distant scenery past the plausibility bounds: up to a third of
+frames were taken for cuts (the counter fell toward 30) and draws that failed on their own jumped
+against the blended scene (a doubled look). The camera's motion is now taken out of each pair
+(plausibility judges the object's own motion; the in-between matrices are carried by exactly half the
+camera's motion, a quaternion half-turn), a unique draw that changed rigidly past the bounds is
+blended by half its own motion, copies are found through a grid of where the camera carries them (a
+budgeted scan ran out when a turn brought dozens into view), and copies just come into view do not
+count toward a cut during a turn. Scripted turns at 11-32 degrees a game frame: 355 of 355 frames
+interpolated (5 before), 0.65 percent of draws unblended (5.9), 59-60 FPS.
+
+**Also:** `run_host.sh` keeps OUT_DIR/test.card between runs (it used to copy the Outset save over it
+at every launch, which lost a session's progress); the pad script takes the C-stick
+(`retrace:buttons:length:x:y:cx:cy`); `DOL_AURORA_FRAME_INTERP_LOG_FRAMES` logs each game frame.
+
 ## 2026-09-28 Better Wind Waker's settings as runtime options, no patched disc (Mac-tested)
 
 **What it is.** Each of Better Wind Waker's settings is now a switch of its own (Mods > Better Wind

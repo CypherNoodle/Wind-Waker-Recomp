@@ -16,13 +16,17 @@
 # save:   the same, then the pause-menu save and a quit to the title; use with
 #         RENDERER=headless PACE=0 (about 2 minutes). Copy OUT_DIR/test.card to
 #         build/mac-interp/saves/outset-start.card to keep it.
-# load:   boots CARD (default build/mac-interp/saves/outset-start.card) and loads
+# load:   boots OUT_DIR/test.card (made from CARD, default build/mac-interp/saves/
+#         outset-start.card, when it does not exist yet or CARD= is given) and loads
 #         slot 1: gameplay on Outset at retrace ~705 instead of ~20,400.
 #         WALK=1 holds the stick from retrace 900 (WALK_X/WALK_Y, default 0/-127;
 #         0/127 runs Link back down the pier with the camera turning).
 # RENDERER=headless and PACE=0 override the window and real-time pacing.
 # ASPECT=16:10|16:9 widescreen (4:3 default), WINDOW=WxH, FULLSCREEN=1, SCALE=N.
 # BWW=1 Better Wind Waker's options (their defaults); OPTIONS=name,-name,... changes them.
+# Mouse: click the window, then move the mouse to turn the camera around Link and
+# tilt it; Esc gives the mouse back. MOUSE_SENSITIVITY=N (default 1, 0.18 degrees
+# a point), MOUSE_INVERT_Y=1 to look down when moving the mouse forward.
 # DUMP_FROM/DUMP_TO: game frames (presents, not retraces) whose real and
 # in-between images are written to OUT_DIR/dump (see frame_interp_report.py).
 set -u
@@ -63,7 +67,11 @@ if [ "$route" = outset ] || [ "$route" = save ]; then
   [ "$route" = save ] && env_args+=(BLUEWAKE_SAVE_ROUTE=1)
 fi
 if [ "$route" = load ]; then
-  cp "${CARD:-$ROOT/build/mac-interp/saves/outset-start.card}" "$out/test.card"
+  # The card is kept between runs of the same OUT_DIR (your progress); the Outset
+  # save is copied in only when there is none yet, or when CARD= names one.
+  if [ -n "${CARD:-}" ] || [ ! -f "$out/test.card" ]; then
+    cp "${CARD:-$ROOT/build/mac-interp/saves/outset-start.card}" "$out/test.card"
+  fi
   script=""
   # A through the title and file select (the play scene is up by retrace 705),
   # then WALK=1 holds the stick forward from retrace 900 for WALK_LEN retraces.
@@ -84,6 +92,8 @@ fi
 # defaults, OPTIONS=name,-name,... (or none,name,...) adjusts them.
 [ "${BWW:-0}" = 1 ] && env_args+=(BLUEWAKE_MODS=betterww)
 [ -n "${OPTIONS:-}" ] && env_args+=(BLUEWAKE_OPTIONS="$OPTIONS")
+[ -n "${MOUSE_SENSITIVITY:-}" ] && env_args+=(BLUEWAKE_MOUSE_SENSITIVITY="$MOUSE_SENSITIVITY")
+[ -n "${MOUSE_INVERT_Y:-}" ] && env_args+=(BLUEWAKE_MOUSE_INVERT_Y="$MOUSE_INVERT_Y")
 [ -n "${WINDOW:-}" ] && env_args+=(DOL_AURORA_WINDOW="$WINDOW")
 [ -n "${FULLSCREEN:-}" ] && env_args+=(DOL_AURORA_FULLSCREEN="$FULLSCREEN")
 [ -n "${SCALE:-}" ] && env_args+=(DOL_AURORA_RENDER_SCALE="$SCALE")

@@ -20,6 +20,7 @@
 #include "card_runtime.h"
 #include "edge_intercepts.h"
 #include "game_options.h"
+#include "mouse_camera.h"
 #include "callback_delivery.h"
 #include "cycle_domain.h"
 #include "interrupt_sources.h"
@@ -1719,6 +1720,7 @@ static void host_actor_search_native(CPUState* cpu) {
 }
 
 static bool host_chassis_edge_service(void* user, CPUState* cpu, u32 address) {
+    bluewake_mouse_camera_dispatch(cpu, address);
     if (__builtin_expect(cpu == NULL || g_turn_census_enabled ||
                              g_boundary_census_enabled ||
                              g_chassis_service_each_block ||
@@ -4006,8 +4008,10 @@ static void host_si_complete_pad_transfer(u32 control) {
 
     DolPadState live_pad[4] = {{0}};
     DolPadState merged_pad;
-    if (g_live_pad_enabled)
+    if (g_live_pad_enabled) {
         (void)dol_platform_pad_read(live_pad);
+        bluewake_mouse_camera_pad(&live_pad[0]);
+    }
     host_note_live_input(&live_pad[0]);
     bluewake_pad_merge(g_live_takeover ? &live_pad[channel] : &g_virtual_pad[channel],
                        &live_pad[channel], &merged_pad);
@@ -4105,8 +4109,10 @@ static void host_si_latch_pad_poll(void) {
         return;
 
     DolPadState live_pad[4] = {{0}};
-    if (g_live_pad_enabled)
+    if (g_live_pad_enabled) {
         (void)dol_platform_pad_read(live_pad);
+        bluewake_mouse_camera_pad(&live_pad[0]);
+    }
     host_note_live_input(&live_pad[0]);
     for (u32 channel = 0; channel < 4u; channel++) {
         if ((channel_mask & (1u << channel)) == 0u)
@@ -4690,6 +4696,7 @@ static void host_sync_vi_cycles(CPUState* cpu) {
         aurora_backend_service_present();
         host_mods_reapply(cpu);
         bluewake_game_options_retrace(cpu);
+        bluewake_mouse_camera_retrace();
         if (g_wall_pace_enabled)
             host_wall_pace(g_host_retrace_count);
         if (g_perf_log_enabled)
@@ -5924,6 +5931,7 @@ int main(int argc, char** argv) {
         if (dol_aurora_initialize(argc, argv, &aurora_config)) {
             aurora_enabled = true;
             g_live_pad_enabled = true;
+            bluewake_mouse_camera_install();
             fprintf(stderr, "[host] renderer=aurora window=%ux%u\n",
                     aurora_config.window_width, aurora_config.window_height);
         } else if (renderer_requested) {
@@ -6453,6 +6461,7 @@ int main(int argc, char** argv) {
     }
     host_mods_enable(lib, &cpu);
     bluewake_game_options_enable(lib, &cpu, g_options_mod);
+    bluewake_mouse_camera_attach(&cpu);
 
     unsigned long long blocks = 0;
     const char* stop_reason = NULL;
