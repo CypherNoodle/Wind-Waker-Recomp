@@ -18,6 +18,7 @@ enum {
     kStayRoom = 0x803F6A78u,      // dStage_roomControl_c::mStayNo
     kPlayerPointer = 0x803CA74Cu, // dComIfGp_getPlayer(0)
     kPos = 0x1F8u,                // fopAc_ac_c::current.pos
+    kOldPos = 0x1E4u,             // fopAc_ac_c::old.pos
     kEventMode = 0x803C9EA2u,     // g_dComIfG_gameInfo.play.mEvtCtrl's mode
 };
 
@@ -43,14 +44,44 @@ static float read_f32(CPUState* cpu, u32 address) {
     return value;
 }
 
+// BLUEWAKE_TEST_PLACE=retrace:x:y:z (testing only): Link stood at x, y, z of
+// the current stage from that retrace, held there for a few, so a view can be
+// reached without a route to it.
+static unsigned long long g_place_retrace;
+static float g_place[3];
+
 void bluewake_fps_watch_attach(CPUState* cpu) {
     g_cpu = cpu;
     const char* on = getenv("BLUEWAKE_FPS_WATCH");
     g_enabled = on == NULL || on[0] != '0';
+    const char* place = getenv("BLUEWAKE_TEST_PLACE");
+    if (place != NULL &&
+        sscanf(place, "%llu:%f:%f:%f", &g_place_retrace, &g_place[0], &g_place[1], &g_place[2]) != 4)
+        g_place_retrace = 0;
+}
+
+static void write_f32(CPUState* cpu, u32 address, float value) {
+    u32 bits;
+    memcpy(&bits, &value, sizeof bits);
+    mem_write32(cpu, address, bits);
+}
+
+static void place_player(void) {
+    const u32 player = mem_read32(g_cpu, kPlayerPointer);
+    if (player < 0x80000000u || player >= 0x81800000u)
+        return;
+    for (u32 i = 0; i < 3u; ++i) {
+        write_f32(g_cpu, player + kPos + i * 4u, g_place[i]);
+        write_f32(g_cpu, player + kOldPos + i * 4u, g_place[i]);
+    }
+    fprintf(stderr, "[test-place] retrace=%llu player=0x%08X now %.0f,%.0f,%.0f\n", g_retrace, player,
+            read_f32(g_cpu, player + kPos), read_f32(g_cpu, player + kPos + 4u), read_f32(g_cpu, player + kPos + 8u));
 }
 
 void bluewake_fps_watch_retrace(void) {
     ++g_retrace;
+    if (g_place_retrace != 0 && g_cpu != NULL && g_retrace >= g_place_retrace && g_retrace < g_place_retrace + 8)
+        place_player();
     if (!g_enabled || g_cpu == NULL)
         return;
     const unsigned long long wall = now_us(CLOCK_MONOTONIC);

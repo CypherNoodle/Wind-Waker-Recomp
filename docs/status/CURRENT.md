@@ -1,3 +1,26 @@
+## 2026-09-29 Cheaper, batched in-between frames and the PC branch's host fixes (Mac-tested)
+
+**Renderer** (RecompCore 6892947, patch 0110):
+- **Encoding:** the render worker binds the vertex and index buffers once a pass and sets bind groups only when they change; a busy scene's replay went from about 4.4 ms to 1.3-1.6 ms.
+- **Batching:** consecutive draws with the same pipeline, constants and textures, whose data follows on, are one draw. Adanmae went from about 6,400 draws a frame to 3,600, the sea from 11,800 to 4,600. In-between frames split a batch whose draws blend differently. `DOL_AURORA_GXCORE_BATCH=0` turns it off.
+- **In-between data:** written into mapped staging buffers and copied on the GPU, instead of a new zero-filled upload buffer every frame (a fifth of the render worker's time).
+- **Pacing:** under sustained overload 60 Hz drops its in-between frames and comes back after 3 s calm. 120 Hz is not lowered unless `DOL_AURORA_FRAME_INTERP_PACING=1`.
+- **Helper thread:** spins less and is woken in batches.
+- **Hidden full-screen window:** asks for no drawable and keeps its surface, so switching away no longer freezes the game for half a second or rebuilds the surface on return.
+- **Diagnostics:** `DOL_GXCORE_DRAW_DUMP=<game frame>` lists every draw of a frame.
+
+**From the PC branch (native-60hz-pc):**
+- Host: the guest-alias registry under a lock for the translation worker (a crash about one launch in eight), graphics address resolutions cached until the registry changes, and the actor search's budget checks collapsed.
+- RecompCore: gather-pipe words straight to the worker's batch, the batch buffer kept, draw plans reset in place, and the texture layout cache locked.
+
+**Other changes:**
+- The mouse camera's per-boundary check is inline.
+- `BLUEWAKE_TEST_PLACE=retrace:x:y:z` stands Link at a position for tests.
+
+**Tested:** Adanmae at 120 Hz holds 119.8 FPS with no slow render items. 40 dumped frames at sea show no pops. 60 Hz and Smooth Motion off hold their rates. `frame_interp_test` and `actor_search_budget_test` pass.
+
+**Known:** the lava in Adanmae renders flat orange. Its texgens read the room's world matrix instead of J3D's projection texture matrix. It is diagnosed, not fixed.
+
 ## 2026-09-29 Smooth Motion at 120 FPS (Mac-tested)
 
 **120 FPS** (RecompCore d389b4b, patch 0108). The options menu's Smooth Motion is Off, 60 or 120

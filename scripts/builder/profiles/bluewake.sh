@@ -34,9 +34,9 @@ PROFILE_HOST_PGO=scripts/builder/profiles/bluewake/host.profdata
 
 # Wind Waker Recomp builds from its own copies of BlueWake's RecompCore and
 # DolRecomp (chrissotraidis 2d60636 and 5c91d6e, each plus this fork's changes:
-# patches/recompcore/0098-0109, patches/dolrecomp/0019).
+# patches/recompcore/0098-0110, patches/dolrecomp/0019).
 RECOMPCORE_URL=https://github.com/elliotttate/RecompCore.git
-RECOMPCORE_SHA=df6c2b1f4427e87b9d2e71c72e2727dde9e66d4b
+RECOMPCORE_SHA=68929476fcc6be8539007583aa62a89c08fa63d0
 DOLRECOMP_SHA=b8b534591cba8ca7cd43943a655ee6e2591cf5de
 DAWN_URL=https://github.com/encounter/dawn/releases/download/v20260618.032059/dawn-ios-arm64.tar.gz
 DAWN_SHA256=ada0bafc173152d80eba7c3b2f9609a71185d5809cbd5dd3251b91a0803a7ae2

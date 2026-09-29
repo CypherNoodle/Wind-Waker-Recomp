@@ -108,6 +108,10 @@ target_include_directories(bluewake_cycle_domain_test PRIVATE
 )
 add_test(NAME bluewake_cycle_domain_test COMMAND bluewake_cycle_domain_test)
 
+add_executable(bluewake_actor_search_budget_test ../../tests/actor_search_budget_test.c)
+target_include_directories(bluewake_actor_search_budget_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_test(NAME bluewake_actor_search_budget_test COMMAND bluewake_actor_search_budget_test)
+
 add_executable(bluewake_interrupt_sources_test
     ../../tests/interrupt_sources_test.c
     src/cycle_domain.c

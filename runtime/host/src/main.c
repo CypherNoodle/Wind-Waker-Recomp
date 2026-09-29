@@ -15,6 +15,7 @@
 #include "core/cpu.h"
 #include "StaticRecompABI.h"
 #include "aram_dma.h"
+#include "actor_search_budget.h"
 #include "audio_capture.h"
 #include "ipl_sram.h"
 #include "card_runtime.h"
@@ -113,19 +114,41 @@ static BlueWakeRelSlot g_rel_slots[BLUEWAKE_MAX_REL_SLOTS];
 static const BlueWakeRelData* g_rel_data;
 static u32 g_rel_data_count;
 
+// The host's guest-alias registry (ppc_guest_alias_*: the REL modules linked
+// over MEM1) changes on the game thread as modules are linked, and the GX
+// translation worker reads it to resolve a display list, vertex array or
+// texture a module keeps in its own data (host_graphics_guest_resolve). An
+// insertion moves the registry's sorted entries under a lookup, which then
+// returns another entry's storage at a wild offset: the translation worker
+// crashed in build_draw_plan_into copying vertices from it (about one launch
+// in eight). Changes and the worker's lookups take this lock; the game
+// thread's own lookups need none, as nothing else changes the registry.
+static pthread_mutex_t g_guest_alias_lock = PTHREAD_MUTEX_INITIALIZER;
+// Counts the registry's changes (under the lock): a graphics resolution made
+// under one count holds until the next (host_graphics_guest_resolve's cache).
+static volatile u32 g_guest_alias_changes;
+
 static bool host_add_shared_guest_alias(u32 linked_start, u32 size,
                                         const u8* initial_bytes) {
     u8* storage = NULL;
-    if (g_module_alias_add_shared == NULL ||
-        !ppc_guest_alias_add(linked_start, size, initial_bytes))
+    if (g_module_alias_add_shared == NULL)
         return false;
-    if (!ppc_guest_alias_get_storage(linked_start, size, &storage)) {
+    pthread_mutex_lock(&g_guest_alias_lock);
+    bool added = ppc_guest_alias_add(linked_start, size, initial_bytes);
+    if (added && !ppc_guest_alias_get_storage(linked_start, size, &storage)) {
         ppc_guest_alias_remove(linked_start, size);
-        return false;
+        added = false;
     }
+    g_guest_alias_changes++;
+    pthread_mutex_unlock(&g_guest_alias_lock);
+    if (!added)
+        return false;
     if (g_module_alias_add_shared(linked_start, size, storage))
         return true;
+    pthread_mutex_lock(&g_guest_alias_lock);
     ppc_guest_alias_remove(linked_start, size);
+    g_guest_alias_changes++;
+    pthread_mutex_unlock(&g_guest_alias_lock);
     return false;
 }
 
@@ -1636,18 +1659,6 @@ static inline const u8* bw_search_word(CPUState* cpu, u32 address) {
     return get_ram_ptr(cpu, address, 4u, NULL);
 }
 
-// One block leader on the precharged path: the leader's budget check passes
-// and the block can charge its whole count up front.
-static inline bool bw_search_leader(s64 downcount, s64 budget, s64 deadline,
-                                    u32 cycles) {
-    if (downcount <= -budget)
-        return false;
-    if (deadline <= 0)
-        return true;
-    const s64 remaining = deadline + downcount;
-    return remaining >= 0 && (u64)remaining >= (u64)cycles;
-}
-
 static void host_actor_search_native(CPUState* cpu) {
     if (cpu->lr != BW_SEARCH_NDIT_RETURN || cpu->gpr[29] != BW_SEARCH_JUDGE_FILTER ||
         (cpu->ctr & ~3u) != BW_SEARCH_JUDGE_FILTER || cpu->gpr[30] != cpu->gpr[4] ||
@@ -1689,25 +1700,15 @@ static void host_actor_search_native(CPUState* cpu) {
         const u32 pid = read_be32(proc_id);
         if (pid == id)
             break;  // the match returns through the translated code
-        s64 d = downcount;
         // JudgeFilter entry (10), JudgeByID (4) and its not-equal tail (2),
         // JudgeFilter's return (5), then cNdIt_Judge: the NULL test (2), the
         // node advance (3), the next load (2), the loop test (2) and the call
         // block (5). Each leader stands for its block's budget check; the
         // return dispatches and the back-edge test the same bound at the same
         // downcount as the leader that follows them.
-        static const u32 k_blocks[] = {10u, 4u, 2u, 5u, 2u, 3u, 2u, 2u, 5u};
-        bool ok = true;
-        for (unsigned b = 0; b < sizeof(k_blocks) / sizeof(k_blocks[0]); ++b) {
-            if (!bw_search_leader(d, budget, deadline, k_blocks[b])) {
-                ok = false;
-                break;
-            }
-            d -= (s64)k_blocks[b];
-        }
-        if (!ok || d <= -budget)  // the chassis check at the next boundary
+        if (!bluewake_actor_search_iteration_fits(downcount, budget, deadline))
             break;
-        downcount = d;
+        downcount -= 35;
         last_id = pid;
         node = next;
         next = read_be32(next_next);
@@ -4506,14 +4507,54 @@ rebudget:
     host_refresh_interrupt_sources(ctx);
 }
 
+static bool host_graphics_guest_resolve_uncached(
+    CPUState* cpu, u32 address, u32 size, DolGuestAddressSpace space,
+    DolGuestResourceKind resource, const void** data, u32* available, bool* any_size);
+
 static bool host_graphics_guest_resolve(
     void* user, u32 address, u32 size, DolGuestAddressSpace space,
     DolGuestResourceKind resource, const void** data, u32* available) {
     CPUState* cpu = (CPUState*)user;
-    DolGuestAddressResolver resolver;
-    DolGuestResolvedRange range;
     if (cpu == NULL || data == NULL || available == NULL)
         return false;
+    // The translation worker resolves the same arrays, textures and display
+    // lists draw after draw: 7 percent of it at native 60 Hz. A result depends
+    // only on the address, size and space and on the alias registry, so it is
+    // kept, per thread, until the registry changes (g_guest_alias_changes).
+    // Where no alias holds the address, no alias holds any range from it, and
+    // the result is the memory from the address whatever the size (a range
+    // that does not fit it fails): such an entry answers every size (size 0
+    // in the entry). A vertex array's size is its indexed span, which changes
+    // from draw to draw, so keyed by size each draw missed, and took the
+    // registry's lock.
+    typedef struct GraphicsResolveEntry {
+        u32 address, size, space, changes;
+        const void* data;
+        u32 available;
+    } GraphicsResolveEntry;
+    static _Thread_local GraphicsResolveEntry resolved[256];
+    const u32 changes = g_guest_alias_changes;
+    GraphicsResolveEntry* const entry = &resolved[((address >> 5) ^ (address >> 13)) & 255u];
+    if (entry->data != NULL && entry->address == address && entry->space == (u32)space &&
+        entry->changes == changes && (entry->size == 0u || entry->size == size)) {
+        if (size == 0u || size > entry->available)
+            return false;
+        *data = entry->data;
+        *available = entry->available;
+        return true;
+    }
+    bool any_size = false;
+    if (!host_graphics_guest_resolve_uncached(cpu, address, size, space, resource, data, available, &any_size))
+        return false;
+    *entry = (GraphicsResolveEntry){address, any_size ? 0u : size, (u32)space, changes, *data, *available};
+    return true;
+}
+
+static bool host_graphics_guest_resolve_uncached(
+    CPUState* cpu, u32 address, u32 size, DolGuestAddressSpace space,
+    DolGuestResourceKind resource, const void** data, u32* available, bool* any_size) {
+    DolGuestAddressResolver resolver;
+    DolGuestResolvedRange range;
     // REL modules run at linked addresses from 0xC0400000, inside the range
     // the GX resolver otherwise reads as MEM1's uncached mirror. A display
     // list or vertex array a module keeps in its own data (Wind Waker's
@@ -4523,7 +4564,16 @@ static bool host_graphics_guest_resolve(
     {
         u8* alias = NULL;
         u32 alias_offset = 0u;
-        if (ppc_guest_alias_resolve(address, size, &alias, &alias_offset) && alias != NULL) {
+        // The translation worker's thread: see g_guest_alias_lock.
+        pthread_mutex_lock(&g_guest_alias_lock);
+        const bool aliased = ppc_guest_alias_resolve(address, size, &alias, &alias_offset);
+        // Whether an alias holds the address at all: if none does, none holds
+        // a range from it of any size, and the result below is every size's.
+        u8* held = NULL;
+        u32 held_offset = 0u;
+        *any_size = !aliased && !ppc_guest_alias_resolve(address, 1u, &held, &held_offset);
+        pthread_mutex_unlock(&g_guest_alias_lock);
+        if (aliased && alias != NULL) {
             *data = alias;
             *available = size;
             return true;
@@ -6308,7 +6358,10 @@ int main(int argc, char** argv) {
             return 1;
         }
         module_alias_clear();
+        pthread_mutex_lock(&g_guest_alias_lock);
         ppc_guest_alias_clear();
+        g_guest_alias_changes++;
+        pthread_mutex_unlock(&g_guest_alias_lock);
         u32 rel_storage_alias_count = 0u;
         for (u32 i = 0; i < rel_data_count; ++i) {
             const BlueWakeRelData* image = &rel_data[i];
