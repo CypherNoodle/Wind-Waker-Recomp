@@ -1,3 +1,46 @@
+## 2026-09-29 An options menu, quick doors, and Smooth Motion for what the game moves itself (Mac-tested)
+
+**Options menu** (`runtime/host/src/settings_menu.cpp`, Mac; RecompCore 66205c2, patch 0105). F1, a
+controller's Back, or Esc while the mouse is free pauses the game and opens Display, Gameplay and
+Controls tabs over it (`dol_aurora_set_hold_redraw` keeps the paused picture on screen). Choices are
+saved to `~/Library/Application Support/Wind Waker Recomp/settings.ini` and applied at the next launch
+before anything reads the environment; the sprint, jump button, mouse camera, fast loading and quick
+doors also take them at once. Test runs pass `BLUEWAKE_SETTINGS=none`.
+
+**Quick doors** (`runtime/host/src/quick_doors.c`). Through a door with a knob, Link opens it as the
+game has him do; once its fade covers the screen the rest is cut (his walk behind it, the wait, and in
+the next room the door opening and closing again), and he stands inside with the door closed as the
+picture comes back: 5.1 seconds to 1.9. `BLUEWAKE_QUICK_DOORS=0` keeps the game's doors;
+`BLUEWAKE_DOOR_TRACE` logs them. With `BWW=1` the right stick now turns the camera the way the mouse
+does (Better Wind Waker's invert_camera_x).
+
+**Smooth Motion for what the game moves itself** (RecompCore 3b65983, patch 0106;
+`runtime/host/src/draw_tags.c`). The in-between frame blends each draw's matrices, so what the game
+moves another way stepped at 30 FPS or was drawn twice. Sword swings: a bone of Link's arm turns 90
+degrees and more in a game frame, which the old 41-degree bound rejected (150 to 420 draws a frame);
+a draw with a key of its own may now turn 150 degrees, blended as a rotation (slerp) so it keeps its
+size. Particles: before each JPA particle draw the host writes the particle and its age to BP 0x7E
+and 0x7D, registers the retail GX never uses, and the renderer pairs the draw with the same particle
+and blends its corners (dust, spray, smoke, sparkles, ripples). The boat's bow waves and trail, drawn
+by their emitters' callbacks, are announced with their emitter and draw count (BP 0x7C, 0x7B) and
+blend vertex by vertex, so the wake no longer sits half a frame ahead of the bow. A broken pot's
+shards (one model at random sizes, tumbling fast) pair with the nearest copy of their size. The boat:
+its CPU-skinned hull, its shadow-map pass, its real shadow's volume (one box for every shadow, moving
+with the camera) and the sea triangles the shadow is cast on (paired by the shadow's texture, a
+different count as it sails). frame_interp_test covers each case. RecompCore 94b97ce and 060293f
+(patches 0103, 0104) move the matching and blending to a helper thread and fix a device loss on
+Direct3D 12; the inputs a draw's blend needs are now captured with it (DrawInput) for that thread.
+
+**Where 60 is missed** (`runtime/host/src/fps_watch.c`). Once a second with fewer than 57 frames on
+screen: `[fps-dip]` with the game's speed, how many frames were interpolated, rejected and unmatched
+draws, the waits for the GX worker, presents and the GPU, and the stage, room and Link's position
+(`BLUEWAKE_FPS_WATCH=0` turns it off). `DOL_AURORA_FRAME_INTERP_TRACE` takes a range of game frames.
+
+**A crash after a long session.** The host places the game's modules (RELs) in memory above the
+game's 24 MiB; that window was 1.5 MiB. After 27 minutes through many islands it was full of linked
+modules, the sea by the pirate ship needed d_a_bb (52 KB), and the game jumped into the module it
+could not load. The window now starts at 0x81820000 (7.4 MiB).
+
 ## 2026-09-29 Fast scene changes, a sprint, and 60 FPS in the Forsaken Fortress (Mac-tested)
 
 **Scene changes** (`runtime/host/src/fast_load.c`; RecompCore b4af144, patch 0101). A door or an exit
