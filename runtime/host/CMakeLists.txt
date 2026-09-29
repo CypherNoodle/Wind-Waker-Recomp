@@ -31,7 +31,9 @@ add_executable(bluewake_host
     src/delivery_digest.c
     src/edge_intercepts.c
     src/game_options.c
+    src/fast_load.c
     src/jump_button.c
+    src/sprint.c
     src/mouse_camera.c
     src/return_census.c
     src/interrupt_sources.c

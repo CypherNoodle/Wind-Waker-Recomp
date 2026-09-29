@@ -1,0 +1,17 @@
+#ifndef BLUEWAKE_SPRINT_H
+#define BLUEWAKE_SPRINT_H
+
+#include "core/cpu.h"
+
+// Holding Shift makes Link run faster than his normal top speed, his run
+// animation sped up to match.
+//
+//   BLUEWAKE_SPRINT_SPEED=1.5          how much faster (1: off)
+//   BLUEWAKE_SPRINT_TRACE=1            log it and Link's speed
+//   BLUEWAKE_SPRINT_TEST=retrace:n     testing: Shift held for n retraces
+
+void bluewake_sprint_attach(CPUState* cpu);
+// Once per retrace, on the thread that pumps SDL's events.
+void bluewake_sprint_retrace(void);
+
+#endif

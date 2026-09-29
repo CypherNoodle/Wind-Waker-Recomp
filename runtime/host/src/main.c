@@ -20,7 +20,9 @@
 #include "card_runtime.h"
 #include "edge_intercepts.h"
 #include "game_options.h"
+#include "fast_load.h"
 #include "jump_button.h"
+#include "sprint.h"
 #include "mouse_camera.h"
 #include "callback_delivery.h"
 #include "cycle_domain.h"
@@ -745,11 +747,15 @@ static void host_mods_enable(void* lib, CPUState* cpu) {
 }
 
 static void host_wall_pace(u64 retrace) {
-    static u64 base_ns, base_retrace;
+    static u64 base_ns, base_retrace, last_retrace;
     struct timespec now_ts;
     clock_gettime(CLOCK_MONOTONIC, &now_ts);
     const u64 now = (u64)now_ts.tv_sec * 1000000000ull + (u64)now_ts.tv_nsec;
-    if (base_ns == 0u) {
+    // The schedule restarts after retraces that were not paced (a scene
+    // change's black, fast-forwarded): they are not waited for afterwards.
+    const bool resumed = retrace != last_retrace + 1u;
+    last_retrace = retrace;
+    if (base_ns == 0u || resumed) {
         base_ns = now;
         base_retrace = retrace;
         return;
@@ -4701,7 +4707,9 @@ static void host_sync_vi_cycles(CPUState* cpu) {
         bluewake_game_options_retrace(cpu);
         bluewake_mouse_camera_retrace();
         bluewake_jump_button_retrace();
-        if (g_wall_pace_enabled)
+        bluewake_sprint_retrace();
+        bluewake_fast_load_retrace(bluewake_host_thread_cpu_us());
+        if (g_wall_pace_enabled && !bluewake_fast_load_fast_forward())
             host_wall_pace(g_host_retrace_count);
         if (g_perf_log_enabled)
             perf_note_retrace(g_host_retrace_count);
@@ -6467,6 +6475,8 @@ int main(int argc, char** argv) {
     bluewake_game_options_enable(lib, &cpu, g_options_mod);
     bluewake_mouse_camera_attach(&cpu);
     bluewake_jump_button_attach(&cpu);
+    bluewake_sprint_attach(&cpu);
+    bluewake_fast_load_attach(&cpu);
 
     unsigned long long blocks = 0;
     const char* stop_reason = NULL;

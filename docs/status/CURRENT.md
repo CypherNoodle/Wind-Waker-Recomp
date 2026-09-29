@@ -1,3 +1,33 @@
+## 2026-09-29 Fast scene changes, a sprint, and 60 FPS in the Forsaken Fortress (Mac-tested)
+
+**Scene changes** (`runtime/host/src/fast_load.c`; RecompCore b4af144, patch 0101). A door or an exit
+took 2.2 seconds, none of it loading (disc reads are already instant): the plain fade (dOvlpFd,
+overlaps 0, 1, 6, 7, 8) counts 26 game frames each way, and the new scene may not load its sounds
+until 36 frames after the door (mDoAud_setSceneName's load timer, while the old music fades). The
+host now shortens a fade as it starts, fader (JUTFader mFadeTime/mTimer) and overlap count
+(overlap1_class 0xCC/0xD0) together, keeping their sum so the scene is swapped the frame the screen
+is fully black (`BLUEWAKE_FADE_FRAMES`, default 6; 0 keeps 26). Once the screen has been black for 6
+retraces of a scene change, the game runs unpaced with `dol_aurora_set_fast_forward`: frames are not
+presented and the audio queue is kept at its 100 ms target (`BLUEWAKE_FAST_FORWARD=0` turns it off;
+at most 600 retraces). Warping into Link's house, windowed with Smooth Motion and sound: 0.63
+seconds (fade 0.20, black 0.25, fade back 0.18) instead of 2.2, starved audio pushes 164 against
+200 before. `BLUEWAKE_LOAD_TRACE=1` logs each retrace of a change; `BLUEWAKE_TEST_WARP` asks for one.
+
+**Sprint** (`runtime/host/src/sprint.c`). Holding Shift makes Link run 1.5 times his top speed
+(`BLUEWAKE_SPRINT_SPEED`): daPy_HIO_move_c0::m (0x8035CED4) field 0x18, the 17 procMove sets
+mMaxNormalSpeed from, and field 0x48, the run animation's rate at it (setMoveAnime blends by speed
+over mMaxNormalSpeed), scaled together and put back on release. Scripted: mNormalSpeed 17 to 25.5
+and back. Swimming, iron boots, targeting and carrying have their own parameters.
+
+**The Forsaken Fortress at 60** (RecompCore b4af144, patch 0102). Its exterior draws 17,500 times a
+frame (550 is usual) and fell to 49 retraces a second: the GX translation worker was 93 percent busy,
+about 40 ms a game frame, 31 percent of it the in-between frame's blending. 96 percent of its draws
+repeat the vertex constants of the draw before them; those are compared once instead of three times,
+a repeated draw matched the same way reuses its in-between block, and indexed position and normal
+matrices are blended only for draws that read them. A Fortress-shaped load (frame_interp benchmark):
+10.0 ms of blending a frame before, 1.8 ms after, with the same blended values; frame_interp_test
+covers the reuse and the indexed matrices. Not yet measured in the Fortress itself.
+
 ## 2026-09-28 Jump button, mouse aiming and zoom, HD texture packs (Mac-tested)
 
 **Jump** (`runtime/host/src/jump_button.c`, the Mac host). Space makes Link jump: at his next proc
