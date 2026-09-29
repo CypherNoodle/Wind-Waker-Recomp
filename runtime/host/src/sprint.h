@@ -4,7 +4,9 @@
 #include "core/cpu.h"
 
 // Holding Shift makes Link run faster than his normal top speed, his run
-// animation sped up to match.
+// animation sped up to match. On a controller, clicking the left stick starts
+// the sprint; it lasts until Link stops (the stick back in the middle) or the
+// next click.
 //
 //   BLUEWAKE_SPRINT_SPEED=1.5          how much faster (1: off)
 //   BLUEWAKE_SPRINT_TRACE=1            log it and Link's speed

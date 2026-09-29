@@ -5,8 +5,8 @@
 
 #include <stdbool.h>
 
-// Jump button (the Mac host): Space makes Link jump when he stands, walks or
-// runs on the ground under the player's control. It is the game's own jump,
+// Jump button: Space, or a controller's left bumper, makes Link jump when he
+// stands, walks or runs on the ground under the player's control. It is the game's own jump,
 // the one Link makes running off a ledge (daPy_lk_c::procAutoJump_init), so
 // its animation, voice, arc, landing, ledge grabs and glides are the game's.
 // Anywhere else (swimming, climbing, hanging, crawling, carrying, on the boat,

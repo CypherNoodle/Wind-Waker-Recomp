@@ -1,5 +1,6 @@
 #include "sprint.h"
 
+#include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
 
 #include <stdio.h>
@@ -13,6 +14,10 @@
 // speed over mMaxNormalSpeed, so a faster top speed alone would slide his
 // feet). Holding Shift scales both; letting go puts them back. Swimming, iron
 // boots, targeting and carrying have their own parameters and are unchanged.
+//
+// On a controller the left stick's click (which the GameCube mapping leaves
+// free) is the sprint: a click starts it, and it lasts until the stick comes
+// back to the middle (Link stops) or the next click.
 enum {
     kMoveParams = 0x8035CED4u,
     kMaxSpeed = kMoveParams + 0x18u,
@@ -32,6 +37,12 @@ static bool g_have_base;
 static unsigned long long g_retrace;
 // BLUEWAKE_SPRINT_TEST=retrace:length (testing only): Shift held meanwhile.
 static unsigned long long g_test_start, g_test_length;
+// The controller's sprint (left stick click).
+static bool g_pad_sprint;
+static bool g_stick_was_down;
+static unsigned g_stick_idle; // retraces the left stick has been near the middle
+static const unsigned kStickIdleRetraces = 8;
+static const float kStickIdle = 0.25f; // of full tilt
 
 static float read_f32(CPUState* cpu, u32 address) {
     const u32 bits = mem_read32(cpu, address);
@@ -57,7 +68,7 @@ void bluewake_sprint_attach(CPUState* cpu) {
     if (test != NULL && sscanf(test, "%llu:%llu", &g_test_start, &g_test_length) == 2)
         g_trace = true;
     if (g_factor > 1.0)
-        fprintf(stderr, "[sprint] Shift runs %.2fx faster\n", g_factor);
+        fprintf(stderr, "[sprint] Shift (or a click of a controller's left stick) runs %.2fx faster\n", g_factor);
 }
 
 static bool shift_held(void) {
@@ -68,6 +79,48 @@ static bool shift_held(void) {
     return keys != NULL &&
            ((count > SDL_SCANCODE_LSHIFT && keys[SDL_SCANCODE_LSHIFT]) ||
             (count > SDL_SCANCODE_RSHIFT && keys[SDL_SCANCODE_RSHIFT]));
+}
+
+// Any connected controller: its left stick's click, and how far that stick is
+// pushed (the largest, 0..1).
+static void read_pads(bool* click, float* tilt) {
+    *click = false;
+    *tilt = 0.0f;
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    for (int i = 0; ids != NULL && i < count; ++i) {
+        SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
+        if (pad == NULL)
+            continue;
+        if (SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_STICK))
+            *click = true;
+        const float x = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX) / 32767.0f;
+        const float y = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY) / 32767.0f;
+        const float t = x * x + y * y;
+        if (t > *tilt)
+            *tilt = t;
+    }
+    SDL_free(ids);
+    *tilt = *tilt > 0.0f ? SDL_sqrtf(*tilt) : 0.0f;
+}
+
+// The controller's sprint: on at a click of the left stick, off at the next or
+// once the stick has rested near the middle.
+static bool pad_sprint(void) {
+    bool click;
+    float tilt;
+    read_pads(&click, &tilt);
+    if (click && !g_stick_was_down) {
+        g_pad_sprint = !g_pad_sprint;
+        g_stick_idle = 0;
+    }
+    g_stick_was_down = click;
+    if (g_pad_sprint) {
+        g_stick_idle = tilt < kStickIdle ? g_stick_idle + 1u : 0u;
+        if (g_stick_idle >= kStickIdleRetraces)
+            g_pad_sprint = false;
+    }
+    return g_pad_sprint;
 }
 
 void bluewake_sprint_retrace(void) {
@@ -84,7 +137,8 @@ void bluewake_sprint_retrace(void) {
         g_base_rate = rate;
         g_have_base = true;
     }
-    const bool sprint = shift_held();
+    const bool pad = pad_sprint();
+    const bool sprint = shift_held() || pad;
     if (sprint != g_sprinting) {
         g_sprinting = sprint;
         const float scale = sprint ? (float)g_factor : 1.0f;

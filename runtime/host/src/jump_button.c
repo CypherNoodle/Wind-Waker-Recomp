@@ -1,6 +1,7 @@
 #include "jump_button.h"
 
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_gamepad.h>
 #include <SDL3/SDL_keyboard.h>
 
 #include <stdatomic.h>
@@ -108,6 +109,11 @@ static unsigned g_presses_seen;
 static unsigned long long g_retrace, g_deadline;
 static unsigned g_follow; // retraces to trace after a jump
 static unsigned long long g_jumps;
+// A controller's left bumper jumps too: the GameCube mapping leaves it free,
+// except on the Switch Online GameCube controller (product 0x2073), where it
+// is L.
+static bool g_bumper_was_down;
+static const Uint16 kNsoGameCubeProduct = 0x2073;
 
 // BLUEWAKE_JUMP_TEST=retrace,...: presses without a keyboard.
 // BLUEWAKE_JUMP_TEST_TARGET=retrace:length: L held (targeting) meanwhile.
@@ -243,7 +249,7 @@ void bluewake_jump_button_attach(CPUState* cpu) {
         g_trace = true;
 #if !(defined(__APPLE__) && TARGET_OS_IPHONE)
     if (g_enabled)
-        fprintf(stderr, "[jump] Space makes Link jump\n");
+        fprintf(stderr, "[jump] Space (or a controller's left bumper) makes Link jump\n");
 #endif
 }
 
@@ -265,6 +271,23 @@ static void follow(void) {
         g_follow = 0u;
 }
 
+// A press of any connected controller's left bumper since the last retrace.
+static bool bumper_pressed(void) {
+    bool down = false;
+    int count = 0;
+    SDL_JoystickID* ids = SDL_GetGamepads(&count);
+    for (int i = 0; ids != NULL && i < count && !down; ++i) {
+        SDL_Gamepad* pad = SDL_GetGamepadFromID(ids[i]);
+        if (pad != NULL && SDL_GetGamepadProduct(pad) != kNsoGameCubeProduct &&
+            SDL_GetGamepadButton(pad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER))
+            down = true;
+    }
+    SDL_free(ids);
+    const bool pressed = down && !g_bumper_was_down;
+    g_bumper_was_down = down;
+    return pressed;
+}
+
 void bluewake_jump_button_retrace(void) {
     ++g_retrace;
     bool pressed = false;
@@ -273,6 +296,8 @@ void bluewake_jump_button_retrace(void) {
         g_presses_seen = presses;
         pressed = true;
     }
+    if (g_enabled && bumper_pressed())
+        pressed = true;
     for (unsigned i = 0; i < g_test_count; ++i)
         pressed = pressed || g_test[i] == g_retrace;
     const bool targeting = g_retrace >= g_target_start && g_retrace < g_target_start + g_target_length;

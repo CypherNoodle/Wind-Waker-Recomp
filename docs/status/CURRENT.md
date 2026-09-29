@@ -17,7 +17,10 @@ seconds (fade 0.20, black 0.25, fade back 0.18) instead of 2.2, starved audio pu
 (`BLUEWAKE_SPRINT_SPEED`): daPy_HIO_move_c0::m (0x8035CED4) field 0x18, the 17 procMove sets
 mMaxNormalSpeed from, and field 0x48, the run animation's rate at it (setMoveAnime blends by speed
 over mMaxNormalSpeed), scaled together and put back on release. Scripted: mNormalSpeed 17 to 25.5
-and back. Swimming, iron boots, targeting and carrying have their own parameters.
+and back. Swimming, iron boots, targeting and carrying have their own parameters. On a controller,
+a click of the left stick starts the sprint, which lasts until the stick rests in the middle or the
+next click, and the left bumper jumps (both are free in the GameCube mapping; on the Switch Online
+GameCube controller, product 0x2073, the bumper is L, so it does not jump there).
 
 **The Forsaken Fortress at 60** (RecompCore b4af144, patch 0102). Its exterior draws 17,500 times a
 frame (550 is usual) and fell to 49 retraces a second: the GX translation worker was 93 percent busy,
@@ -26,7 +29,9 @@ repeat the vertex constants of the draw before them; those are compared once ins
 a repeated draw matched the same way reuses its in-between block, and indexed position and normal
 matrices are blended only for draws that read them. A Fortress-shaped load (frame_interp benchmark):
 10.0 ms of blending a frame before, 1.8 ms after, with the same blended values; frame_interp_test
-covers the reuse and the indexed matrices. Not yet measured in the Fortress itself.
+covers the reuse and the indexed matrices. In play, the Fortress exterior at 17,900 draws a frame
+now holds 60 (the GX worker's slow batches average 22 ms; the emulation thread is 94 percent busy, so
+there is little headroom).
 
 ## 2026-09-28 Jump button, mouse aiming and zoom, HD texture packs (Mac-tested)
 
