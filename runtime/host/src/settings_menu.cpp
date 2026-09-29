@@ -29,6 +29,7 @@ extern "C" {
 extern "C" {
 void aurora_set_frame_buffer_scale(float scale);
 void aurora_set_frame_interpolation(bool enabled);
+void aurora_set_frame_interp_steps(int steps);
 void aurora_set_fps_overlay(bool enabled);
 void aurora_set_forced_anisotropy(unsigned samples);
 }
@@ -39,7 +40,7 @@ namespace {
 // the menu does not show) is kept as it was.
 const char* const kKeys[] = {
     "BLUEWAKE_ASPECT",          "DOL_AURORA_FULLSCREEN",    "DOL_AURORA_RENDER_SCALE",
-    "DOL_AURORA_FRAME_INTERP",  "DOL_AURORA_SHOW_FPS",      "DOL_AURORA_FORCE_ANISO",
+    "DOL_AURORA_FRAME_INTERP",  "DOL_AURORA_FRAME_INTERP_STEPS", "DOL_AURORA_SHOW_FPS", "DOL_AURORA_FORCE_ANISO",
     "DOL_AURORA_TEXTURE_PACK",  "BLUEWAKE_MODS",            "BLUEWAKE_OPTIONS",
     "BLUEWAKE_FADE_FRAMES",     "BLUEWAKE_FAST_FORWARD",    "BLUEWAKE_QUICK_DOORS",
     "BLUEWAKE_JUMP_BUTTON",
@@ -243,10 +244,19 @@ void display_tab() {
         aurora_set_frame_buffer_scale(static_cast<float>(scale));
     }
 
-    bool smooth = env_on("DOL_AURORA_FRAME_INTERP", false);
-    if (ImGui::Checkbox("Smooth Motion (60 frames a second)", &smooth)) {
-        set_env("DOL_AURORA_FRAME_INTERP", smooth ? "1" : "0");
-        aurora_set_frame_interpolation(smooth);
+    // Smooth Motion: the game's 30 frames a second, or in-between frames for
+    // 60 (one each) or 120 (three each, for a 120 Hz display such as a
+    // MacBook Pro's).
+    static const char* const kSmooth[] = {"Off (30, the game's)", "60 frames a second",
+                                          "120 frames a second (120 Hz displays)"};
+    int smooth = !env_on("DOL_AURORA_FRAME_INTERP", false)                      ? 0
+                 : std::atoi(env("DOL_AURORA_FRAME_INTERP_STEPS", "1").c_str()) >= 3 ? 2
+                                                                                    : 1;
+    if (combo("Smooth Motion", &smooth, kSmooth, 3)) {
+        set_env("DOL_AURORA_FRAME_INTERP", smooth != 0 ? "1" : "0");
+        set_env("DOL_AURORA_FRAME_INTERP_STEPS", smooth == 2 ? "3" : "1");
+        aurora_set_frame_interp_steps(smooth == 2 ? 3 : 1);
+        aurora_set_frame_interpolation(smooth != 0);
     }
 
     bool fps = env_on("DOL_AURORA_SHOW_FPS", false);

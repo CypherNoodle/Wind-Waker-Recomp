@@ -1,3 +1,32 @@
+## 2026-09-29 Smooth Motion at 120 FPS (Mac-tested)
+
+**120 FPS** (RecompCore d389b4b, patch 0108). The options menu's Smooth Motion is Off, 60 or 120
+(`DOL_AURORA_FRAME_INTERP_STEPS=3`, or `HZ=120` for `run_host.sh`), for 120 Hz displays such as a
+MacBook Pro's. Each game frame gets three in-between frames, at a quarter, half and three quarters of
+the way: a matched draw is blended once per step, the camera's part motion the screw motion's power at
+t (exactly half at 0.5, so four quarter steps make the whole), and the helper thread stages each
+step's block and a particle's vertices. On the user's save on a beach, full screen with the 4K pack
+and 16x anisotropy: 120 presents a second, 8.4 ms apart at the median.
+
+**A steady present clock** (same patch). Presents are held aside and shown on one clock, continuing
+from the game frame before's last, from two alternating sets of held frames, with what is due
+presented between the in-between frames' replays and every 512 commands of a pass. Before, the first
+in-between frame was presented at once and the rest a quarter of a frame after it: at 120 Hz the
+second came 18 ms late and the third and the real frame back to back when the next frame arrived
+(bursts, the sea shimmering), and at 60 Hz presents alternated 22 and 12 ms apart (now 16.5).
+`DOL_AURORA_PRESENT_LOG=1` logs each present; `DOL_AURORA_PRESENT_CLOCK=0` keeps the old 60 Hz timing.
+
+**The sea blinking out on a shore at 120.** The in-between blocks of a beach at 120 come to about 55 MB
+and the area had 32: 6,900 blocks a frame did not fit, and those draws kept the next frame's transforms
+in two of the three in-between frames, the sea among them. The area now has 32 MB per step. Found by
+dumping 144 game frames walking in the shallows and flagging any in-between frame unlike both real
+frames around it (five in a row, the sea missing); afterwards none.
+
+**Saved options at launch** (RecompCore df6c2b1, patch 0109). Smooth Motion, its steps, the FPS overlay
+and forced anisotropy were read by Aurora's static initialisers, before the host applies the saved
+options, so the menu's 120 came back as 60 and 16x anisotropy as none; the backend reads them again
+at initialisation.
+
 ## 2026-09-29 An options menu, quick doors, and Smooth Motion for what the game moves itself (Mac-tested)
 
 **Options menu** (`runtime/host/src/settings_menu.cpp`, Mac; RecompCore 66205c2, patch 0105). F1, a
