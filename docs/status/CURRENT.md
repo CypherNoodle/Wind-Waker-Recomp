@@ -1,3 +1,31 @@
+## 2026-09-28 Jump button, mouse aiming and zoom, HD texture packs (Mac-tested)
+
+**Jump** (`runtime/host/src/jump_button.c`, the Mac host). Space makes Link jump: at his next proc
+call (execute's `(this->*mCurProcFunc)()`, a chassis edge), when that proc is procWait, procFreeWait
+or procMove and he is on the ground with nothing else going on, the call goes to procAutoJump_init
+(0x80115EA4) instead, the jump off a ledge, so the game flies and lands it. A press in the air, a
+roll, water, a ladder, an event, a menu, while carrying, in iron boots or targeting is dropped, not
+kept. From standing it is a short hop; it goes the way Link faces. `BLUEWAKE_JUMP_BUTTON=0`,
+`BLUEWAKE_JUMP_TRACE=1`, `BLUEWAKE_JUMP_TEST=retrace,...`.
+
+**Mouse aiming and zoom** (`mouse_camera.c`). In first person and every item's aim (bow, hookshot,
+grappling hook, boomerang, telescope, Picto Box: the subject camera, engine 4) the mouse turns the
+aim itself at the player's update (daPy_Execute's entry): shape_angle.y with the angles the USA
+execute puts back (l_debug_shape_angle / l_debug_current_angle), and the tilt (dCamera_c m388),
+with the same turn in the view cache, so the frame follows with no easing lag and the game's limits
+hold. The wheel zooms: the follow camera's distance in third person (0.5x-2x), and the telescope's and
+Picto Box's own 1x-9x zoom (m38C), also while the game locks the view on a target (Aryll's telescope
+lesson does, and waits for a full zoom). Her lesson checks the postman's head within 50 screen units
+of the circle's middle whatever the zoom, so it is found at 1x.
+
+**HD texture packs.** `run_host.sh TEXTURES=DIR` takes a Dolphin-format pack (its GZL folder, or a
+Dolphin folder holding one) into `DOL_AURORA_TEXTURE_PACK`. ZWW4K 1.0.0d: 561 replacements (BC7),
+the pier and the HUD replaced, 60 FPS without hitches, about 240 MB more; 23 of its mip files have the
+wrong size and are dropped with the levels below them, as in Dolphin.
+
+**Also:** `bluewake_edge_intercepts_test` builds again (the mouse camera's sources, which need SDL,
+had been added to it).
+
 ## 2026-09-28 Mac mouse camera, and in-between frames through fast turns (Mac-tested)
 
 **Mouse camera** (`runtime/host/src/mouse_camera.c`, the Mac host). Click the window to hand it the

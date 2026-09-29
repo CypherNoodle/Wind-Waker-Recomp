@@ -31,6 +31,7 @@ add_executable(bluewake_host
     src/delivery_digest.c
     src/edge_intercepts.c
     src/game_options.c
+    src/jump_button.c
     src/mouse_camera.c
     src/return_census.c
     src/interrupt_sources.c
@@ -203,7 +204,6 @@ add_executable(bluewake_edge_intercepts_test
     ../../tests/edge_intercepts_test.c
     src/edge_intercepts.c
     src/game_options.c
-    src/mouse_camera.c
     src/card_runtime.c)
 target_link_libraries(bluewake_edge_intercepts_test PRIVATE gxruntime)
 target_include_directories(bluewake_edge_intercepts_test PRIVATE

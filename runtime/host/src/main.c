@@ -20,6 +20,7 @@
 #include "card_runtime.h"
 #include "edge_intercepts.h"
 #include "game_options.h"
+#include "jump_button.h"
 #include "mouse_camera.h"
 #include "callback_delivery.h"
 #include "cycle_domain.h"
@@ -1721,6 +1722,8 @@ static void host_actor_search_native(CPUState* cpu) {
 
 static bool host_chassis_edge_service(void* user, CPUState* cpu, u32 address) {
     bluewake_mouse_camera_dispatch(cpu, address);
+    if (bluewake_jump_button_dispatch(cpu, address))
+        return true;
     if (__builtin_expect(cpu == NULL || g_turn_census_enabled ||
                              g_boundary_census_enabled ||
                              g_chassis_service_each_block ||
@@ -4697,6 +4700,7 @@ static void host_sync_vi_cycles(CPUState* cpu) {
         host_mods_reapply(cpu);
         bluewake_game_options_retrace(cpu);
         bluewake_mouse_camera_retrace();
+        bluewake_jump_button_retrace();
         if (g_wall_pace_enabled)
             host_wall_pace(g_host_retrace_count);
         if (g_perf_log_enabled)
@@ -6462,6 +6466,7 @@ int main(int argc, char** argv) {
     host_mods_enable(lib, &cpu);
     bluewake_game_options_enable(lib, &cpu, g_options_mod);
     bluewake_mouse_camera_attach(&cpu);
+    bluewake_jump_button_attach(&cpu);
 
     unsigned long long blocks = 0;
     const char* stop_reason = NULL;

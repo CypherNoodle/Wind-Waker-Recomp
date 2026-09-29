@@ -24,13 +24,15 @@
 # RENDERER=headless and PACE=0 override the window and real-time pacing.
 # ASPECT=16:10|16:9 widescreen (4:3 default), WINDOW=WxH, FULLSCREEN=1, SCALE=N.
 # BWW=1 Better Wind Waker's options (their defaults); OPTIONS=name,-name,... changes them.
+# TEXTURES=DIR an HD texture pack: its GZL folder, or a Dolphin folder holding one.
 # Mouse: click the window, then move the mouse to turn the camera around Link and
-# tilt it; Esc gives the mouse back. MOUSE_SENSITIVITY=N (default 1, 0.18 degrees
+# tilt it (in first person and when aiming an item, to aim); the wheel zooms;
+# Esc gives the mouse back. MOUSE_SENSITIVITY=N (default 1, 0.18 degrees
 # a point), MOUSE_INVERT_Y=1 to look down when moving the mouse forward.
 # DUMP_FROM/DUMP_TO: game frames (presents, not retraces) whose real and
 # in-between images are written to OUT_DIR/dump (see frame_interp_report.py).
 set -u
-if [ $# -lt 3 ]; then sed -n '2,34p' "$0"; exit 2; fi
+if [ $# -lt 3 ]; then sed -n '2,36p' "$0"; exit 2; fi
 # The main checkout (build/ lives there), also when run from a git worktree.
 ROOT=$(dirname "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)")
 out=$1; interp=$2; retraces=$3; route=${4:-title}; dump_from=${5:-}; dump_to=${6:-}
@@ -97,6 +99,16 @@ fi
 [ -n "${WINDOW:-}" ] && env_args+=(DOL_AURORA_WINDOW="$WINDOW")
 [ -n "${FULLSCREEN:-}" ] && env_args+=(DOL_AURORA_FULLSCREEN="$FULLSCREEN")
 [ -n "${SCALE:-}" ] && env_args+=(DOL_AURORA_RENDER_SCALE="$SCALE")
+# TEXTURES: a Dolphin-format HD texture pack (tex1_*.dds/.png). A Dolphin
+# folder (User/Load/Textures/GZL inside) or a Load/Textures folder also works.
+if [ -n "${TEXTURES:-}" ]; then
+  pack=$TEXTURES
+  for sub in User/Load/Textures/GZL Load/Textures/GZL Textures/GZL GZL; do
+    [ -d "$TEXTURES/$sub" ] && { pack=$TEXTURES/$sub; break; }
+  done
+  [ -d "$pack" ] || { echo "TEXTURES=$TEXTURES: no such folder" >&2; exit 2; }
+  env_args+=(DOL_AURORA_TEXTURE_PACK="$pack")
+fi
 if [ -n "$dump_from" ]; then
   mkdir -p "$out/dump"
   env_args+=(DOL_AURORA_FRAME_INTERP_DUMP="$out/dump" DOL_AURORA_FRAME_INTERP_DUMP_FROM="$dump_from"
