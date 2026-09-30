@@ -29,7 +29,12 @@ credits, and personal-build restrictions are preserved below and in [RIGHTS_AND_
 > assets or saves. Your personal app contains code translated from your disc; you also import the
 > disc on your device.
 >
-> **Source preview.** No prebuilt IPA is provided. You build BlueWake on a Mac from your disc and
+> **Mac download.** An Apple Silicon Mac app (macOS 15 or later) is on the
+> [Releases page](https://github.com/elliotttate/Wind-Waker-Recomp/releases): it contains the
+> recompiled game code, and you choose your own disc image at the first launch. See
+> [docs/MACOS_RELEASE.md](docs/MACOS_RELEASE.md).
+>
+> **iPhone and iPad: source preview.** No prebuilt IPA is provided. You build BlueWake on a Mac from your disc and
 > install it on your own device. The builder tunes the game on your Mac as part of the build; the
 > developer build tuned this way reaches 30 FPS on an iPad Pro (M2). See [Getting started](#getting-started).
 >
