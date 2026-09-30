@@ -56,6 +56,7 @@ load off those two workers or stops them waiting.
 | 18 | Fast scene changes | a door or exit 2.2 -> 0.63 s | `runtime/host/src/fast_load.c`, 0101 |
 | 19 | Quick doors | a door with a knob 5.1 -> 1.9 s | `runtime/host/src/quick_doors.c` |
 | 20 | Settings read again at start | saved 120 Hz and 16x anisotropy actually apply at launch | 0109 |
+| 21 | The Windows build's cheaper worker draws | on slow cores 23-26 -> 29-30 game FPS; on an M3 Max the worker 55.4 -> 53.2 % busy | 0112 |
 
 Patch numbers are RecompCore changes (`patches/recompcore/NNNN-*.patch`, in RecompCore's
 `GXRuntime/graphics/aurora/lib/gfx/` unless noted).
@@ -315,6 +316,29 @@ Switch: `BLUEWAKE_QUICK_DOORS=0`.
 Smooth Motion, its steps, the FPS overlay and forced anisotropy were read by static initialisers before
 the host applies the saved options, so a saved 120 came back as 60 and 16x anisotropy as none. The
 backend reads them again when it initialises.
+
+### 21. The Windows build's cheaper worker draws (0112, RecompCore windows-release 4f7a3ec, merged)
+
+Made on Windows, where a Ryzen 5 5600X tester got about 25 frames a second: at Outset's spawn view
+(about 14,400 draws a frame) the GX worker's per-draw path was long rather than dominated by one thing
+(copies of each draw's 2.3 KB transform snapshot and 2.8 KB constant block, the pipeline key derived
+again from the registers, a pipeline lookup that allocated a callback, hashed and locked, three locked
+texture-binding lookups, a statistics pass over every vertex, a full fence per draw). The fixes:
+- the pipeline key derived from the BP, CP and XF registers is cached, keyed by a register version that
+  changes whenever a BP, CP or VAT register changes value (the host's draw tag registers leave it
+  alone), and the vertex walk by its VCD and VAT: 96 percent of draws hit;
+- the consumer no longer walks every vertex for totals nothing reads;
+- a draw's pipeline lookup is remembered for the next draw with the same config, with no allocation,
+  hash or lock, and a textured draw with the same view and sampler state reuses its bind group;
+- a Smooth Motion job whose constants repeat the one before carries no copy, and the fence is paid
+  only when the helper may be asleep.
+
+On the Windows test PC's efficiency cores: 23-26 -> 29-30 game frames a second, the game waiting on the
+worker 190-250 -> 20-65 ms a second. On an M3 Max, where memory copies and hashes are cheap, the gain is
+small: the worker 55.4 -> 53.2 percent busy at the Outset spawn with Smooth Motion 60 (sampled 8 s
+each), 95.6 percent of draws hitting the cache, and `DOL_GXCORE_DERIVED_VERIFY=1` (derive again at
+every hit and compare) finding no mismatch in 5.7 million hits on a walk nor in 7.0 million after a
+save state load. Switch: `DOL_GXCORE_DERIVED_CACHE=0`.
 
 ## Finding slow spots
 

@@ -9,6 +9,6 @@ The build uses a fork instead. BlueWake's is https://github.com/chrissotraidis/R
 (some were revised by later ones), the files that were never committed on the development Mac, and the
 DolRecomp submodule pointing at https://github.com/chrissotraidis/DolRecomp (5c91d6e). Wind Waker Recomp
 builds from its own copy, https://github.com/elliotttate/RecompCore, branch `bluewake`, commit
-6892947: that tree plus 0098 to 0110, with DolRecomp at https://github.com/elliotttate/DolRecomp
+8ab24da: that tree plus 0098 to 0112, with DolRecomp at https://github.com/elliotttate/DolRecomp
 (b8b5345, 5c91d6e plus patches/dolrecomp/0019). The Builder fetches it at the commit pinned in
 `scripts/builder/profiles/bluewake.sh`; see docs/status/DEVICE_BUILD.md.
