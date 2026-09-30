@@ -65,4 +65,17 @@ build libpng "$WORK/src/libpng-1.6.58" -DPNG_SHARED=OFF -DPNG_STATIC=ON -DPNG_TE
     -DPNG_FRAMEWORK=OFF
 build freetype "$WORK/src/freetype-2.14.3" -DFT_DISABLE_HARFBUZZ=ON -DFT_DISABLE_BROTLI=ON \
     -DFT_DISABLE_BZIP2=ON -DFT_REQUIRE_PNG=ON -DFT_REQUIRE_ZLIB=ON
+# nod (MIT OR Apache-2.0), prebuilt for Apple Silicon: the launcher unpacks
+# compressed disc images (Dolphin's RVZ, WIA, GCZ, CISO and others) with it.
+NOD=$WORK/nod
+nod_archive=$WORK/downloads/libnod-macos-arm64.tar.gz
+[ -f "$nod_archive" ] || curl -fL --retry 2 --connect-timeout 20 -o "$nod_archive" \
+    https://github.com/encounter/nod/releases/download/v2.0.0-alpha.10/libnod-macos-arm64.tar.gz
+[ "$(shasum -a 256 "$nod_archive" | awk '{print $1}')" = 878fa0afb92175c555ec949322c263886b38a304499a43c12861261e5be61e87 ] ||
+    { echo "checksum mismatch: $nod_archive" >&2; exit 1; }
+rm -rf "$NOD" && mkdir -p "$NOD" && tar -xzf "$nod_archive" -C "$NOD"
+for license in LICENSE-MIT LICENSE-APACHE; do
+    curl -fsSL -o "$NOD/$license" "https://raw.githubusercontent.com/encounter/nod/v2.0.0-alpha.10/$license"
+done
+echo "nod: v2.0.0-alpha.10 in $NOD"
 echo "prefix: $PREFIX"

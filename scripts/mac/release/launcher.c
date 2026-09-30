@@ -10,8 +10,12 @@
 //     GZLE01.card    the memory card; sram.bin, settings.ini, logs/
 //
 // then runs the host with the environment a double-clicked app does not get.
+// A compressed image (Dolphin's RVZ, WIA, GCZ, CISO and others) is first
+// unpacked once, with nod, into a plain GZLE01.iso in that folder, which the
+// game then reads.
 // A variable already set wins, so a terminal launch can override any of it.
 #include "disc_import.h"
+#include "nod.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -75,7 +79,7 @@ static void show_message(const char* message, int error) {
 // The player's disc image, chosen in a file dialog; false when cancelled.
 static int choose_disc(char* path, size_t size) {
     run_script("POSIX path of (choose file with prompt \"Choose your disc image of The Legend of Zelda: "
-               "The Wind Waker (USA, GZLE01). It stays where it is; the game reads it while it runs.\")",
+               "The Wind Waker (USA, GZLE01): .iso, .gcm, or a Dolphin .rvz, .gcz, .wia or .ciso.\")",
                path, size);
     return path[0] != '\0';
 }
@@ -100,6 +104,93 @@ static void write_text(const char* file, const char* text) {
         return;
     fputs(text, f);
     fclose(f);
+}
+
+static void notify(const char* message) {
+    char text[512], script[1024];
+    script_text(text, sizeof text, message);
+    snprintf(script, sizeof script, "display notification \"%s\" with title \"%s\"", text, kTitle);
+    run_script(script, NULL, 0);
+}
+
+// A plain GameCube image: the disc magic at 0x1C.
+static int is_plain_image(const char* path) {
+    unsigned char header[0x20];
+    FILE* f = fopen(path, "rb");
+    if (f == NULL)
+        return 0;
+    const size_t got = fread(header, 1, sizeof header, f);
+    fclose(f);
+    return got == sizeof header && header[0x1C] == 0xC2 && header[0x1D] == 0x33 && header[0x1E] == 0x9F &&
+           header[0x1F] == 0x3D;
+}
+
+// A compressed image unpacked into a plain one at `out`; 0 on success.
+static int unpack_image(const char* in, const char* out, char* error, size_t error_size) {
+    NodDiscOptions options = {0};
+    options.preloader_threads = 4;
+    NodHandle* disc = NULL;
+    if (nod_disc_open(in, &options, &disc) != NOD_RESULT_OK) {
+        const char* why = nod_error_message();
+        snprintf(error, error_size,
+                 "This file is not a GameCube disc image Wind Waker Recomp can read (%s). Choose a .iso, .gcm or "
+                 "Dolphin .rvz/.gcz/.wia/.ciso image of your disc.",
+                 why != NULL ? why : "unknown format");
+        return -1;
+    }
+    NodDiscHeader header;
+    if (nod_disc_header(disc, &header) != NOD_RESULT_OK || memcmp(header.game_id, "GZLE01", 6) != 0) {
+        snprintf(error, error_size,
+                 "This disc is not The Legend of Zelda: The Wind Waker for the USA (GZLE01). Its id is %.6s.",
+                 header.game_id);
+        nod_free(disc);
+        return -1;
+    }
+    char tmp[PATH_MAX];
+    snprintf(tmp, sizeof tmp, "%s.part", out);
+    FILE* f = fopen(tmp, "wb");
+    if (f == NULL) {
+        snprintf(error, error_size, "Could not write %s (%s).", tmp, strerror(errno));
+        nod_free(disc);
+        return -1;
+    }
+    const uint64_t total = nod_disc_size(disc);
+    static uint8_t buffer[8u << 20];
+    uint64_t done = 0;
+    int result = 0, last = -1;
+    for (;;) {
+        const int64_t n = nod_read(disc, buffer, sizeof buffer);
+        if (n < 0) {
+            const char* why = nod_error_message();
+            snprintf(error, error_size, "Could not read the disc image (%s).", why != NULL ? why : "read error");
+            result = -1;
+            break;
+        }
+        if (n == 0)
+            break;
+        if (fwrite(buffer, 1, (size_t)n, f) != (size_t)n) {
+            snprintf(error, error_size, "Could not write the unpacked disc image (%s).", strerror(errno));
+            result = -1;
+            break;
+        }
+        done += (uint64_t)n;
+        const int percent = total != 0 ? (int)(done * 100u / total) : 0;
+        if (percent / 10 != last / 10)
+            fprintf(stderr, "[app] unpacking the disc image: %d%%\n", percent);
+        last = percent;
+    }
+    nod_free(disc);
+    if (fclose(f) != 0 && result == 0) {
+        snprintf(error, error_size, "Could not write the unpacked disc image (%s).", strerror(errno));
+        result = -1;
+    }
+    if (result == 0 && rename(tmp, out) != 0) {
+        snprintf(error, error_size, "Could not write %s (%s).", out, strerror(errno));
+        result = -1;
+    }
+    if (result != 0)
+        unlink(tmp);
+    return result;
 }
 
 static void progress(void* context, double fraction, const char* stage) {
@@ -169,6 +260,18 @@ int main(int argc, char** argv) {
         ask = 1;
         char error[512] = {0};
         mkdir(game, 0755);
+        if (!is_plain_image(disc)) {
+            char plain[PATH_MAX];
+            snprintf(plain, sizeof plain, "%s/GZLE01.iso", support);
+            fprintf(stderr, "[app] unpacking %s to %s\n", disc, plain);
+            notify("Unpacking your disc image once (about a minute)...");
+            if (unpack_image(disc, plain, error, sizeof error) != 0) {
+                fprintf(stderr, "[app] %s\n", error);
+                show_message(error, 1);
+                continue;
+            }
+            snprintf(disc, sizeof disc, "%s", plain);
+        }
         fprintf(stderr, "[app] preparing %s\n", disc);
         if (bluewake_disc_prepare(disc, game, progress, NULL, error, sizeof error) != 0) {
             fprintf(stderr, "[app] %s\n", error);

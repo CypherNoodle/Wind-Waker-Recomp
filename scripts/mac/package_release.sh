@@ -42,8 +42,11 @@ rm -rf "$APP" "$ZIP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resources/licenses"
 
 # The launcher, with the iPad app's disc preparation.
+# nod's C objects claim macOS 15.5; they are compression code without OS calls.
+[ -f "$DEPS/nod/lib/libnod.a" ] || die "no nod in $DEPS/nod; run scripts/mac/build_release_deps.sh"
 xcrun clang -O2 -arch arm64 -mmacosx-version-min=$MACOS_TARGET -Wall \
-    -I "$SRC/apple/ios/src" "$SRC/scripts/mac/release/launcher.c" "$SRC/apple/ios/src/disc_import.c" \
+    -I "$SRC/apple/ios/src" -I "$DEPS/nod/include" "$SRC/scripts/mac/release/launcher.c" \
+    "$SRC/apple/ios/src/disc_import.c" "$DEPS/nod/lib/libnod.a" -Wl,-w \
     -o "$APP/Contents/MacOS/$NAME"
 cp "$HOST" "$APP/Contents/MacOS/bluewake_host"
 cp "$MODULE" "$APP/Contents/Frameworks/gGZLE01_recomp.dylib"
@@ -101,6 +104,8 @@ cp "$DEPS/src/zstd-1.5.7/LICENSE" "$L/zstd-LICENSE.txt"
 cp "$DEPS/src/libpng-1.6.58/LICENSE" "$L/libpng-LICENSE.txt"
 cp "$DEPS/src/freetype-2.14.3/LICENSE.TXT" "$L/FreeType-LICENSE.txt"
 cp "$DEPS/src/freetype-2.14.3/docs/FTL.TXT" "$L/FreeType-FTL.txt"
+cp "$DEPS/nod/LICENSE-MIT" "$L/nod-LICENSE-MIT.txt"
+cp "$DEPS/nod/LICENSE-APACHE" "$L/nod-LICENSE-APACHE.txt"
 cat >"$L/THIRD_PARTY_NOTICES.md" <<'EOF'
 # Third-party notices
 
@@ -121,6 +126,7 @@ The app also contains:
 | Zstandard 1.5.7 | BSD-3-Clause | zstd-LICENSE.txt |
 | libpng 1.6.58 | libpng-2.0 | libpng-LICENSE.txt |
 | FreeType 2.14.3 | FreeType License | FreeType-LICENSE.txt, FreeType-FTL.txt |
+| nod v2.0.0-alpha.10 (disc image reading, in the launcher) | MIT OR Apache-2.0 | nod-LICENSE-MIT.txt, nod-LICENSE-APACHE.txt |
 | Widescreen code from Dolphin's GZLE01 game settings | GPL-2.0-or-later | Dolphin-GPL-2.0-or-later.txt |
 | Better Wind Waker's settings, reimplemented after WideBoner/betterww | MIT | https://github.com/WideBoner/betterww |
 
@@ -142,7 +148,7 @@ cat >"$APP/Contents/Resources/BUILD.json" <<EOF
   "host_sha256": "$(sha "$HOST")",
   "game_module_sha256": "$(sha "$MODULE")",
   "launcher_sha256": "$(sha "$APP/Contents/MacOS/$NAME")",
-  "static_libraries": "scripts/mac/build_release_deps.sh: abseil 20260817.0, fmt 12.2.0, zstd 1.5.7, libpng 1.6.58, FreeType 2.14.3",
+  "static_libraries": "scripts/mac/build_release_deps.sh: abseil 20260817.0, fmt 12.2.0, zstd 1.5.7, libpng 1.6.58, FreeType 2.14.3, nod v2.0.0-alpha.10 (launcher)",
   "supported_disc": "GZLE01 USA revision 0 (main.dol SHA-1 8d28bab68bb5078c38e43f29206f0bd01f7e7a67)"
 }
 EOF

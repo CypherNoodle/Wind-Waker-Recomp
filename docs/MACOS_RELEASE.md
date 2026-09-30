@@ -10,9 +10,9 @@ settings.
 - An Apple Silicon Mac (M1 or newer). Intel Macs are not supported.
 - macOS 15 or later. The host and its bundled libraries are built for macOS 15; testing was done on
   an M3 Max.
-- Your own disc image of **The Legend of Zelda: The Wind Waker, USA (GZLE01), revision 0**, as a
-  plain `.iso` or `.gcm` (not `.rvz`, `.ciso` or `.nkit`). Other regions and revisions are refused.
-  The app checks `main.dol` (SHA-1 `8d28bab68bb5078c38e43f29206f0bd01f7e7a67`).
+- Your own disc image of **The Legend of Zelda: The Wind Waker, USA (GZLE01), revision 0**: a plain
+  `.iso` or `.gcm`, or a Dolphin `.rvz`, `.gcz`, `.wia` or `.ciso`. Other regions and revisions are
+  refused; the app checks `main.dol` (SHA-1 `8d28bab68bb5078c38e43f29206f0bd01f7e7a67`).
 
 The download contains the recompiled game code and the runtime. It contains no disc image, game files,
 textures, audio, saves or settings: the game runs only with your own legally obtained disc.
@@ -25,8 +25,9 @@ textures, audio, saves or settings: the game runs only with your own legally obt
    **System Settings → Privacy & Security** and choose **Open Anyway** for Wind Waker Recomp, if you
    trust the download ([Apple's guidance](https://support.apple.com/en-us/102445)).
 4. Choose your disc image when asked. The app checks it and prepares the game's executable and modules
-   from it (a few seconds). The image stays where it is; the game reads it while it runs, so choose it
-   again if you move it.
+   from it (a few seconds). A compressed image (`.rvz` and the like) is first unpacked once into a plain
+   `GZLE01.iso` (1.4 GB) in the app's data folder, which the game then reads; a plain image stays where
+   it is and is read in place, so choose it again if you move it.
 
 The first launches compile rendering pipelines as new scenes appear, so the first minutes can hitch;
 later launches reuse them.
@@ -53,7 +54,8 @@ HD texture packs and Better Wind Waker's settings.
 
 `~/Library/Application Support/Wind Waker Recomp` holds the memory card (`GZLE01.card`), settings
 (`settings.ini`), the files prepared from your disc (`game/`), where your disc is (`disc.txt`) and a log
-per session (`logs/`). Replacing the app keeps them. To use another disc image, delete `disc.txt`.
+per session (`logs/`), and the unpacked `GZLE01.iso` if you chose a compressed image. Replacing the
+app keeps them. To use another disc image, delete `disc.txt`.
 
 HD texture packs in Dolphin's format for GZLE01 can be chosen in the options.
 
