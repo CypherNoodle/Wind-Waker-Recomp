@@ -8,8 +8,8 @@
 # MODULE is the recompiled game module (build/mac-interp/composite-options/
 # gGZLE01_recomp.dylib, the one with Better Wind Waker's settings and the
 # widescreen code). The app contains no game data: its launcher
-# (scripts/mac/release/launcher.c) asks for the player's own disc at the first
-# launch. Output: build/mac-release/dist/WindWakerRecomp-VERSION-macos-arm64.zip.
+# (scripts/mac/release/launcher.m, AppKit) asks for the player's own disc at the
+# first launch. Output: build/mac-release/dist/WindWakerRecomp-VERSION-macos-arm64.zip.
 set -euo pipefail
 ROOT=$(dirname "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)")
 SRC=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
@@ -44,10 +44,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Frameworks" "$APP/Contents/Resourc
 # The launcher, with the iPad app's disc preparation.
 # nod's C objects claim macOS 15.5; they are compression code without OS calls.
 [ -f "$DEPS/nod/lib/libnod.a" ] || die "no nod in $DEPS/nod; run scripts/mac/build_release_deps.sh"
-xcrun clang -O2 -arch arm64 -mmacosx-version-min=$MACOS_TARGET -Wall \
-    -I "$SRC/apple/ios/src" -I "$DEPS/nod/include" "$SRC/scripts/mac/release/launcher.c" \
-    "$SRC/apple/ios/src/disc_import.c" "$DEPS/nod/lib/libnod.a" -Wl,-w \
-    -o "$APP/Contents/MacOS/$NAME"
+xcrun clang -O2 -arch arm64 -mmacosx-version-min=$MACOS_TARGET -Wall -fobjc-arc \
+    -I "$SRC/apple/ios/src" -I "$DEPS/nod/include" "$SRC/scripts/mac/release/launcher.m" \
+    "$SRC/apple/ios/src/disc_import.c" "$DEPS/nod/lib/libnod.a" -framework Cocoa \
+    -framework UniformTypeIdentifiers -Wl,-w -o "$APP/Contents/MacOS/$NAME"
 cp "$HOST" "$APP/Contents/MacOS/bluewake_host"
 cp "$MODULE" "$APP/Contents/Frameworks/gGZLE01_recomp.dylib"
 
