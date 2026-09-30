@@ -45,6 +45,11 @@ A game controller works as a GameCube pad. On the keyboard:
 | Start | Return |
 | D-pad | arrow keys |
 
+On a controller the right stick turns the camera directly, with no easing, and aims in first person and
+with items; clicking it is first person (and back out). In the telescope and the Picto Box the left
+stick zooms. The left bumper jumps and a click of the left stick sprints. The game's own right stick
+(the GameCube C-stick) is an option under Controls.
+
 Click the game to turn the camera with the mouse (left click is A, the wheel zooms); Esc gives the
 mouse back. **Esc** (with the mouse free), **F1** or a controller's Back button opens the options:
 aspect ratio, fullscreen, render resolution, Smooth Motion (Off, 60 or 120), texture filtering,
