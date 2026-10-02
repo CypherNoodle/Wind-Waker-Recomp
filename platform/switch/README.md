@@ -39,6 +39,12 @@ The current program initializes libnx console and HID, calls the real
 GXRuntime event-clock implementation, and exits with the `+` button. It is a
 link/toolchain proof, not a renderer or gameplay milestone.
 
+The build-side proof was completed with devkitA64 15.2.0 on 2026-10-02. See
+`PORTING_AUDIT.md` for the pinned official toolchain-image digest, ELF details,
+and NRO checksum. Running the result still requires a physical Switch in
+Application mode; this repository does not treat a successful package step as
+hardware validation.
+
 ## Continuous integration
 
 `.github/workflows/switch.yml` follows the PaperBoat-nx Switch workflow: it

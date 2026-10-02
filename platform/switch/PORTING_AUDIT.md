@@ -46,10 +46,11 @@ seams. Do not replace Aurora wholesale.
   integration should cross-compile the generated C backend with devkitA64, or
   add and validate a DolRecomp AArch64 ELF target before consuming native
   objects. Reusing macOS/iOS Mach-O objects is invalid.
-- The immediate environment blocker is external to the source tree:
-  devkitA64, libnx, `nacptool`, and `elf2nro` are not installed, and no Docker
-  or Podman runtime is available. Consequently the real AArch64 link and NRO
-  conversion cannot be executed in this checkout yet.
+- The host does not have a system-wide devkitPro installation or a Docker/
+  Podman daemon. For reproducible local verification, the official
+  `devkitpro/devkita64` image was pinned by digest and its filesystem was
+  extracted into the workspace. This provides the unmodified devkitA64,
+  libnx, `nacptool`, and `elf2nro` toolchain without requiring root access.
 
 ## Switch references inspected
 
@@ -94,10 +95,23 @@ Dusklight's game audio subsystem or replace the DSP. Validate initialization,
 buffer underruns, sample rate, pause/resume, and shutdown on hardware before
 enabling it by default.
 
-## Milestone gate
+## Milestone 1 verification
 
-Milestone 1 is the AArch64 ELF/NRO toolchain proof in this directory. Aurora,
-Dawn, NVK, translated game objects, and audio stay disabled until a real
-`WindWakerRecomp.nro` is produced with devkitA64/libnx and launched on hardware.
-This repository must not add no-op render/audio implementations to bypass that
-gate.
+The toolchain gate passed on 2026-10-02 using the official image
+`devkitpro/devkita64@sha256:1fc388c3a0d34bd2045a6dadcb1020e069d5f876a187fd705de14b4440c00282`
+and `aarch64-none-elf-gcc (devkitA64) 15.2.0`.
+
+- `WindWakerRecomp.elf`: 2,950,320 bytes, ELF64 AArch64 static PIE, build ID
+  `5d368d80fbe16c7c18b02ac1ca6bafeae5b030c1`.
+- `WindWakerRecomp.nro`: 215,237 bytes.
+- NRO SHA-256:
+  `fb7e6d5000bd859b0cd5bf7dcdc6b785439c141a46955ffdb3623515d64fd1f0`.
+- The packaged output is
+  `build/switch/switch/WindWakerRecomp/WindWakerRecomp.nro`.
+
+This completes the build-side portion of milestone 1. Launch and input/exit
+behavior still require physical Switch validation. Milestone 2 may now add a
+standalone libnx/NWindow/Vulkan/NVK clear-and-present test. Aurora, Dawn,
+translated game objects, and audio remain gated until that graphics test is
+both built and hardware-validated. No no-op render/audio implementations may
+be added to bypass either gate.
