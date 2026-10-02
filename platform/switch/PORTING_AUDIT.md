@@ -1,0 +1,102 @@
+# Switch port audit
+
+Audit performed on 2026-10-02. Revisions are recorded explicitly so later
+graphics work can be reproduced instead of following moving branches.
+
+## Product baseline
+
+- Wind-Waker-Recomp: `d102695a1847963504ea55d1cf0bc96a9fa663ec`.
+- RecompCore (`bluewake`): `8ab24daee9c641634fda5cac30389ad4b2cfda5e`.
+- DolRecomp (`bluewake`): `b8b534591cba8ca7cd43943a655ee6e2591cf5de`.
+- The product Aurora is not an independent submodule. It is an owned hard fork
+  vendored in RecompCore at `GXRuntime/graphics/aurora`.
+- Its documented upstream fork point is encounter/aurora
+  `05495810ba4bc906f4f9a131cb5792011b3f35c4`, plus seven BlueWake bootstrap
+  patches already folded into the vendor tree. Replacing this directory with a
+  Switch fork would discard guest-memory resolvers, replay fixes, EFB readback,
+  pipeline synchronization, and GX behavior fixes.
+
+Conclusion: preserve the pinned BlueWake tree and port only the Switch platform
+seams. Do not replace Aurora wholesale.
+
+## Build and platform blockers found
+
+- The repository has no cross-platform top-level application CMake target. Its
+  only current GUI application target is `apple/ios/CMakeLists.txt`, which owns
+  UIKit/Objective-C entry code and Apple framework links. The new Switch target
+  therefore composes the already-portable GXRuntime directly instead of trying
+  to conditionally mutate the iOS bundle.
+- The 35-source GXRuntime C core is portable C and configures independently
+  when both Aurora options are off. Its renderer path is C++20 and currently
+  assumes SDL3 window/input plus the desktop/Apple Dawn platform selection.
+- The vendored Aurora has no `AURORA_PLATFORM_SWITCH` selection, no libnx
+  window/input implementations, no Dawn `NWindow` surface descriptor, and no
+  Switch Vulkan/NVK link recipe. These are the main graphics build blockers.
+- Aurora's cache uses SQLite/POSIX behavior that needs the Switch VFS or
+  lock-free `unix-none` handling demonstrated by the two Switch forks. Its
+  asynchronous pipeline compilation also needs an explicit, sufficiently large
+  pthread stack on libnx.
+- The existing app host and DSP donor are wired by the iOS target and contain
+  Apple framework, Objective-C, app-container, and input/UI integration. Their
+  portable pieces must be selected into a new host target; the Apple entry and
+  framework sources must not be compiled on Switch.
+- The composite build accepts either generated C chunks or already-generated
+  native `.o` chunks. Existing LLVM objects are platform/object-format and CPU
+  specific, so they cannot be linked into a Horizon AArch64 ELF. The first game
+  integration should cross-compile the generated C backend with devkitA64, or
+  add and validate a DolRecomp AArch64 ELF target before consuming native
+  objects. Reusing macOS/iOS Mach-O objects is invalid.
+- The immediate environment blocker is external to the source tree:
+  devkitA64, libnx, `nacptool`, and `elf2nro` are not installed, and no Docker
+  or Podman runtime is available. Consequently the real AArch64 link and NRO
+  conversion cannot be executed in this checkout yet.
+
+## Switch references inspected
+
+| Reference | Revision | Reusable evidence |
+|---|---|---|
+| HayatoG/aurora-switch, `dusklight-switch-port` | `64cb652f28f13b039a81bd6b3c58c2cf73a49ef7` | Smallest clear Aurora/Dawn Switch delta: libnx window/input, `NWindow` Dawn surface, NVK static link, SQLite `unix-none`, and an 8 MiB pipeline-worker stack. |
+| souldbminerr/aurora-switch, `switch` | `6d9f9d9fe8952aada5274154645610042d0a036e` | Newer but more entangled port; useful for its Switch SQLite VFS and thread/runtime tuning, not as a drop-in base. |
+| HayatoG/dusklight | `95322b8616d3f18ec438ab37479bbca1d22d73a6` | End-to-end libnx lifecycle, Dawn/Vulkan/NVK wiring, packaging, cache behavior, and a hardware-tested audren backend. Some older planning files are stale; `RESUME_REPORT_V141.md` records the later working state. |
+| HayatoG/switch-nvk, `master` | `6eec707da3ad5f86c64f748226583202801bfd03` | Packaging and integration source of truth. |
+| HayatoG/switch-nvk, `switch-port/nvk-wsi` | `0771652cfba18279c21a0917e944123b1ef6b89b` | `VK_NN_vi_surface`/`nwindow` WSI bring-up. |
+| HayatoG/switch-nvk, `switch-port/triple-buffer` | `2a454df9c7e35028258b3303f90e767194f38f31` | Three-buffer WSI variant. |
+| HayatoG/switch-nvk, `switch-port/wsi-zero-copy` | `beaddd335e17d59346c7c96d6c7baeb29e674481` | Block-linear zero-copy present path. |
+| danfromtico/mesa-switch | `d4a00ea0ab3f59afb967cc5d779e4263d237bd77` | Mesa 26.2.3 Switch baseline used only as a lower-layer reference. |
+
+## Graphics integration decision
+
+The minimal path is BlueWake Aurora -> Dawn Vulkan -> packaged switch-nvk ->
+libnx `nwindow`. The first transplant should be the platform boundary from
+HayatoG's Aurora port: `AURORA_PLATFORM_SWITCH`, libnx window/input sources,
+`SurfaceSourceSwitchNWindow`, Switch Dawn configuration, and explicit NVK link
+inputs. The BlueWake renderer and GXRuntime interfaces remain authoritative.
+
+NVK must be consumed as a pinned install tree, not rebuilt implicitly inside
+the application build. Its public package combines the Vulkan driver, WSI, and
+compatibility shims; its consumer recipe also requires the documented wrapped
+POSIX calls and static dependencies. Zero-copy and triple buffering are later
+performance choices, not prerequisites for the first clear/present frame.
+
+## Audio decision (documented before modification)
+
+No audio code is changed in milestone 1. GXRuntime already owns the emulated
+DSP/audio production path; the Switch-specific missing piece is an output sink.
+Dusklight provides the closest validated pattern: libnx `audren`, a dedicated
+worker, four queued wave buffers, `armDCacheFlush` before submission, and
+float32-stereo to signed-16 conversion because its tested audren voice rejected
+`PcmFormat_Float`.
+
+When audio work begins, keep GXRuntime's DSP and mixer intact and implement a
+small output backend at its existing host-audio boundary. Do not import
+Dusklight's game audio subsystem or replace the DSP. Validate initialization,
+buffer underruns, sample rate, pause/resume, and shutdown on hardware before
+enabling it by default.
+
+## Milestone gate
+
+Milestone 1 is the AArch64 ELF/NRO toolchain proof in this directory. Aurora,
+Dawn, NVK, translated game objects, and audio stay disabled until a real
+`WindWakerRecomp.nro` is produced with devkitA64/libnx and launched on hardware.
+This repository must not add no-op render/audio implementations to bypass that
+gate.
