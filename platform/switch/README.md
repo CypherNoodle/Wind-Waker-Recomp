@@ -23,9 +23,11 @@ export DEVKITPRO=/opt/devkitpro
 platform/switch/build.sh
 ```
 
-The result is `build/switch/WindWakerRecomp.nro`. The target uses devkitPro's
-official `nx_generate_nacp` and `nx_create_nro` helpers. Copy it to
-`/switch/WindWakerRecomp/WindWakerRecomp.nro` on the SD card.
+The result is the SD-card-ready directory
+`build/switch/switch/WindWakerRecomp/`. The target uses devkitPro's official
+`nx_generate_nacp` and `nx_create_nro` helpers and follows the packaging layout
+validated by `CypherNoodle/PaperBoat-nx`. Copy that directory to `/switch/` on
+the SD card.
 
 For a RecompCore checkout elsewhere, add:
 
@@ -36,3 +38,11 @@ platform/switch/build.sh -DBLUEWAKE_RECOMPCORE_DIR=/path/to/RecompCore
 The current program initializes libnx console and HID, calls the real
 GXRuntime event-clock implementation, and exits with the `+` button. It is a
 link/toolchain proof, not a renderer or gameplay milestone.
+
+## Continuous integration
+
+`.github/workflows/switch.yml` follows the PaperBoat-nx Switch workflow: it
+runs in the official `devkitpro/devkita64` container, verifies the preinstalled
+tools, fetches the exact RecompCore SHA from `config/dependencies.lock.json`,
+builds `switch-package`, and uploads the SD-card-ready directory. It runs only
+for `switch-bringup` pushes or manual dispatches.

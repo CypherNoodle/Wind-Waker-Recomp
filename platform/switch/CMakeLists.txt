@@ -2,8 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 
 project(WindWakerRecompSwitch LANGUAGES C)
 
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch" OR
-   NOT CMAKE_C_COMPILER MATCHES "aarch64-none-elf")
+if(NOT NINTENDO_SWITCH OR NOT COMMAND nx_create_nro)
     message(FATAL_ERROR
         "The Switch target must be cross-compiled with devkitA64. Configure with "
         "-DCMAKE_TOOLCHAIN_FILE=$ENV{DEVKITPRO}/cmake/Switch.cmake")
@@ -55,3 +54,16 @@ nx_create_nro(WindWakerRecompNro
     TARGET WindWakerRecomp
     OUTPUT "${BLUEWAKE_NRO}"
     NACP "${BLUEWAKE_NACP}")
+
+# Match the SD-card-ready artifact layout proven by PaperBoat-nx. This package
+# contains only the homebrew executable; game data must be supplied by the user.
+set(BLUEWAKE_SWITCH_PACKAGE_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/switch/WindWakerRecomp")
+add_custom_target(switch-package
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+        "${BLUEWAKE_SWITCH_PACKAGE_DIR}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "${BLUEWAKE_NRO}"
+        "${BLUEWAKE_SWITCH_PACKAGE_DIR}/WindWakerRecomp.nro"
+    DEPENDS WindWakerRecompNro
+    VERBATIM)

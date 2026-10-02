@@ -63,6 +63,7 @@ seams. Do not replace Aurora wholesale.
 | HayatoG/switch-nvk, `switch-port/triple-buffer` | `2a454df9c7e35028258b3303f90e767194f38f31` | Three-buffer WSI variant. |
 | HayatoG/switch-nvk, `switch-port/wsi-zero-copy` | `beaddd335e17d59346c7c96d6c7baeb29e674481` | Block-linear zero-copy present path. |
 | danfromtico/mesa-switch | `d4a00ea0ab3f59afb967cc5d779e4263d237bd77` | Mesa 26.2.3 Switch baseline used only as a lower-layer reference. |
+| CypherNoodle/PaperBoat-nx, `switch-port` | `9b4d3381dc8551fe124c7596ca912d0e24530891` | Owner's proven devkitA64 CMake/package/CI pattern: official container, toolchain verification, `nx_create_nro`, SD-card tree, and artifact upload. |
 
 ## Graphics integration decision
 
