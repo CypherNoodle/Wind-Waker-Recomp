@@ -155,6 +155,11 @@ and sprint input adapters are deliberately stubbed on Switch until their UI
 and controls are mapped to native libnx input. No full-host build or hardware
 claim has been made yet.
 
+The eventual hardware test must be launched in Application mode (for example,
+through a title override), not the memory-constrained Album applet. The static
+composite, 32 MiB guest MEM1, ARAM, Dawn/NVK and runtime caches are intentionally
+outside the scope of an applet-memory launch.
+
 ## Continuous integration
 
 `.github/workflows/switch.yml` follows the PaperBoat-nx Switch workflow: it

@@ -145,7 +145,11 @@ if(BLUEWAKE_SWITCH_ENABLE_GAME)
         "${BLUEWAKE_HOST_SRC}"
         "${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime/include"
         "${ABI_DIR}")
-    target_link_libraries(WindWakerRecomp PRIVATE gGZLE01_recomp z m pthread)
+    # Repeat the runtime and libnx after the composite: both are static
+    # archives, and generated/module glue introduces CPU/libnx references
+    # after their first occurrence on the link line.
+    target_link_libraries(WindWakerRecomp PRIVATE
+        gGZLE01_recomp GXRuntime::runtime nx z m pthread)
     set_target_properties(WindWakerRecomp PROPERTIES LINKER_LANGUAGE CXX)
 endif()
 

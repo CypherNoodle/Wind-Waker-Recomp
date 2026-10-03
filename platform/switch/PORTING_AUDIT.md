@@ -205,6 +205,16 @@ services; desktop UI/input extensions are excluded for this first admission.
 This gate has received static review only and has not been configured, compiled,
 linked, packaged or run on hardware.
 
+The first portability review found two source/link hazards before that build:
+libnx's newlib clock shim accepts `CLOCK_MONOTONIC` and `CLOCK_REALTIME`, not
+the desktop host's diagnostic `CLOCK_THREAD_CPUTIME_ID`, so Switch diagnostics
+now use the monotonic clock; and the static GXRuntime/libnx archives are repeated
+after the composite on the final link line so symbols first referenced by
+generated/module glue are eligible for extraction. Native PAD was also traced
+end-to-end through Aurora's `PADRead` adapter into the host SI state; the Switch
+`+` button maps to the guest's GameCube START button rather than terminating the
+full game host.
+
 Per the owner's instruction, no configure, compile, link or packaging command
 was run for this milestone. Verification so far is limited to exact revision
 pins, conflict review, source/interface inspection and `git diff --check`.

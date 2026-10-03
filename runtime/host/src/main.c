@@ -68,6 +68,15 @@
 #define BLUEWAKE_ENABLE_DEVELOPER_TRACING 0
 #endif
 
+// libnx implements CLOCK_MONOTONIC and CLOCK_REALTIME. It intentionally
+// rejects CLOCK_THREAD_CPUTIME_ID, which these counters use only for optional
+// performance diagnostics, so use elapsed time on Switch.
+#if defined(__SWITCH__)
+#define BLUEWAKE_THREAD_CLOCK CLOCK_MONOTONIC
+#else
+#define BLUEWAKE_THREAD_CLOCK CLOCK_THREAD_CPUTIME_ID
+#endif
+
 #if BLUEWAKE_ENABLE_DEVELOPER_TRACING
 #define BLUEWAKE_TRACE_STORAGE(name) static bool name
 #define BLUEWAKE_TRACE_ASSIGN(name, environment) \
@@ -836,7 +845,7 @@ static void host_wall_pace(u64 retrace) {
     }
 }
 unsigned long long bluewake_host_thread_cpu_us(void) {
-    return perf_now_us(CLOCK_THREAD_CPUTIME_ID);
+    return perf_now_us(BLUEWAKE_THREAD_CLOCK);
 }
 
 static void perf_note_retrace(u64 retrace) {
@@ -844,7 +853,7 @@ static void perf_note_retrace(u64 retrace) {
     const u64 now = perf_now_us(CLOCK_MONOTONIC);
     if (window_start == 0) {
         window_start = last = now;
-        window_cpu = perf_now_us(CLOCK_THREAD_CPUTIME_ID);
+        window_cpu = perf_now_us(BLUEWAKE_THREAD_CLOCK);
         return;
     }
     const u64 gap = now - last;
@@ -854,7 +863,7 @@ static void perf_note_retrace(u64 retrace) {
     if (gap > 50000u) hitches++;
     const u64 elapsed = now - window_start;
     if (elapsed < 1000000u) return;
-    const u64 cpu_now = perf_now_us(CLOCK_THREAD_CPUTIME_ID);
+    const u64 cpu_now = perf_now_us(BLUEWAKE_THREAD_CLOCK);
     fprintf(stderr,
             "[perf] retrace=%llu rate=%.1f worst_ms=%.1f hitches=%llu busy=%.0f%%\n",
             (unsigned long long)retrace, (double)window_retraces * 1e6 / (double)elapsed,

@@ -9,6 +9,12 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(__SWITCH__)
+#define BLUEWAKE_FPS_CPU_CLOCK CLOCK_MONOTONIC
+#else
+#define BLUEWAKE_FPS_CPU_CLOCK CLOCK_THREAD_CPUTIME_ID
+#endif
+
 // Once a second of wall time, when fewer than kDipBelow frames reached the
 // screen: what the game and the in-between frames did in that second, and
 // where Link was, so the places where Smooth Motion does not hold 60 can be
@@ -87,7 +93,7 @@ void bluewake_fps_watch_retrace(void) {
     const unsigned long long wall = now_us(CLOCK_MONOTONIC);
     if (g_last_wall_us == 0u) {
         g_last_wall_us = wall;
-        g_last_cpu_us = now_us(CLOCK_THREAD_CPUTIME_ID);
+        g_last_cpu_us = now_us(BLUEWAKE_FPS_CPU_CLOCK);
         g_last_retrace = g_retrace;
         dol_aurora_frame_timing(&g_last);
         return;
@@ -96,7 +102,7 @@ void bluewake_fps_watch_retrace(void) {
         return;
     DolAuroraFrameTiming now;
     dol_aurora_frame_timing(&now);
-    const unsigned long long cpu_us = now_us(CLOCK_THREAD_CPUTIME_ID);
+    const unsigned long long cpu_us = now_us(BLUEWAKE_FPS_CPU_CLOCK);
     const double seconds = (double)(wall - g_last_wall_us) / 1e6;
     const double shown = (double)(now.shown - g_last.shown) / seconds;
     const double speed = (double)(g_retrace - g_last_retrace) / seconds / 59.94;
