@@ -10,6 +10,9 @@ if [[ -z "${BLUEWAKE_NVK_DIR:-}" ]]; then
     exit 1
 fi
 
+BLUEWAKE_NVK_SOURCE_DIR="${BLUEWAKE_NVK_SOURCE_DIR:-$(cd "${BLUEWAKE_NVK_DIR}/.." && pwd)}"
+BLUEWAKE_NVK_BUILD_DIR="${BLUEWAKE_NVK_BUILD_DIR:-${BLUEWAKE_NVK_SOURCE_DIR}/mb}"
+
 export PATH="${DEVKITPRO}/devkitA64/bin:${DEVKITPRO}/tools/bin:${PATH}"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -19,6 +22,8 @@ cmake -S "${repo_root}/platform/switch" -B "${build_dir}" -G Ninja \
     -DCMAKE_TOOLCHAIN_FILE="${DEVKITPRO}/cmake/Switch.cmake" \
     -DCMAKE_BUILD_TYPE=Release \
     -DBLUEWAKE_NVK_DIR="${BLUEWAKE_NVK_DIR}" \
+    -DBLUEWAKE_NVK_SOURCE_DIR="${BLUEWAKE_NVK_SOURCE_DIR}" \
+    -DBLUEWAKE_NVK_BUILD_DIR="${BLUEWAKE_NVK_BUILD_DIR}" \
     "$@"
 cmake --build "${build_dir}" --target switch-vulkan-smoke-package
 

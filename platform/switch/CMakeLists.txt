@@ -73,21 +73,44 @@ add_custom_target(switch-package
 # admitted to the application target. The large NVK build remains external.
 set(BLUEWAKE_NVK_DIR "" CACHE PATH
     "switch-nvk install tree containing include/ and lib/libvulkan.a")
+set(BLUEWAKE_NVK_SOURCE_DIR "" CACHE PATH
+    "switch-nvk source tree used to build the pinned NVK package")
+set(BLUEWAKE_NVK_BUILD_DIR "" CACHE PATH
+    "Mesa cross-build directory produced by switch-nvk")
 if(BLUEWAKE_NVK_DIR)
     if(NOT EXISTS "${BLUEWAKE_NVK_DIR}/lib/libvulkan.a" OR
        NOT EXISTS "${BLUEWAKE_NVK_DIR}/include/vulkan/vulkan.h")
         message(FATAL_ERROR
             "BLUEWAKE_NVK_DIR must point to a packaged switch-nvk install tree")
     endif()
+    if(NOT EXISTS "${BLUEWAKE_NVK_SOURCE_DIR}/winsys/drm_shim.c" OR
+       NOT EXISTS "${BLUEWAKE_NVK_SOURCE_DIR}/compat/compat.c")
+        message(FATAL_ERROR
+            "BLUEWAKE_NVK_SOURCE_DIR must point to the pinned switch-nvk source tree")
+    endif()
+    if(NOT EXISTS "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/vulkan/libnvk.a")
+        message(FATAL_ERROR
+            "BLUEWAKE_NVK_BUILD_DIR must point to its completed Mesa cross-build")
+    endif()
 
-    add_executable(WindWakerVulkanSmoke source/vulkan_smoke.c)
+    add_executable(WindWakerVulkanSmoke
+        source/vulkan_smoke.c
+        "${BLUEWAKE_NVK_SOURCE_DIR}/winsys/drm_shim.c"
+        "${BLUEWAKE_NVK_SOURCE_DIR}/winsys/switch_libc_shim.c"
+        "${BLUEWAKE_NVK_SOURCE_DIR}/compat/compat.c")
     target_compile_features(WindWakerVulkanSmoke PRIVATE c_std_11)
     target_compile_definitions(WindWakerVulkanSmoke PRIVATE
         __SWITCH__ _GNU_SOURCE)
     target_include_directories(WindWakerVulkanSmoke PRIVATE
-        "${BLUEWAKE_NVK_DIR}/include")
+        "${BLUEWAKE_NVK_DIR}/include"
+        "${BLUEWAKE_NVK_SOURCE_DIR}/switch-cross-include"
+        "${BLUEWAKE_NVK_SOURCE_DIR}/mesa-25/include"
+        "${BLUEWAKE_NVK_SOURCE_DIR}/mesa-25/src/nouveau/drm"
+        "${BLUEWAKE_NVK_SOURCE_DIR}/winsys"
+        "${BLUEWAKE_NVK_SOURCE_DIR}/compat")
     target_compile_options(WindWakerVulkanSmoke PRIVATE
-        -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections)
+        -Wall -Wextra -Wpedantic -ffunction-sections -fdata-sections
+        -include "${BLUEWAKE_NVK_SOURCE_DIR}/compat/switch_compat.h")
     target_link_options(WindWakerVulkanSmoke PRIVATE
         -Wl,--gc-sections
         -Wl,--wrap=open
@@ -95,8 +118,30 @@ if(BLUEWAKE_NVK_DIR)
         -Wl,--wrap=stat
         -Wl,--wrap=lstat)
     target_link_libraries(WindWakerVulkanSmoke PRIVATE
-        "${BLUEWAKE_NVK_DIR}/lib/libvulkan.a"
-        nx z zstd expat m pthread)
+        -Wl,--whole-archive
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/vulkan/libnvk.a"
+        -Wl,--no-whole-archive
+        -Wl,--start-group
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/codegen/libnouveau_codegen.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/util/libmesa_util.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/util/libmesa_util_sse41.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/util/blake3/libblake3.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/c11/impl/libmesa_util_c11.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/compiler/libnak.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/compiler/libnak_rs.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/compiler/rust/libcompiler_c_helpers.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/headers/libnvidia_headers_c.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/nil/liblibnil.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/nil/liblibnil_format_table.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/compiler/nir/libnir.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/compiler/libcompiler.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/mme/libnouveau_mme.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/nouveau/winsys/libnouveau_ws.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/vulkan/util/libvulkan_util.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/compiler/spirv/libvtn.a"
+        "${BLUEWAKE_NVK_BUILD_DIR}/src/util/libxmlconfig.a"
+        nx z zstd expat m pthread
+        -Wl,--end-group)
     set_target_properties(WindWakerVulkanSmoke PROPERTIES LINKER_LANGUAGE CXX)
 
     set(BLUEWAKE_VULKAN_NACP

@@ -69,6 +69,12 @@ The target consumes NVK as an external, pinned static package. Neither the
 not enable Aurora/Dawn and does not claim hardware success until the NRO is run
 on a physical Switch in Application mode.
 
+The build script infers the switch-nvk source directory and its `mb` cross-build
+directory from `BLUEWAKE_NVK_DIR`. They can be overridden with
+`BLUEWAKE_NVK_SOURCE_DIR` and `BLUEWAKE_NVK_BUILD_DIR`. The executable links
+the original component archives because Mesa's weak Vulkan dispatch references
+must not be resolved by selective extraction from the convenience fat archive.
+
 ## Continuous integration
 
 `.github/workflows/switch.yml` follows the PaperBoat-nx Switch workflow: it

@@ -127,13 +127,21 @@ Horizon/libnx; the application consumes the completed static archives instead.
 The repository target `WindWakerVulkanSmoke` then linked against the packaged
 NVK tree and produced a real NRO on 2026-10-02:
 
-- ELF: 23,693,768 bytes, ELF64 AArch64 PIE, build ID
-  `5ebec2d2daecdbb43048590f24dfd005c878febe`.
-- NRO: 12,609,733 bytes, SHA-256
-  `03569ae3bbb23f70fde9e6eec7455f7da179f8b0ecb469c4ddead91941990646`.
+- Corrected ELF: 23,855,144 bytes, ELF64 AArch64 PIE, build ID
+  `33e011c909f416cfea4ce5641817ef45af717d10`.
+- Corrected NRO: 12,671,173 bytes, SHA-256
+  `edf89427995d3fa1513a86aee928e252fbb7ff20cf1e7774d7427ead35c2386d`.
 - The linked ELF defines `vk_icdGetInstanceProcAddr`,
   `wsi_CreateViSurfaceNN`, and `wsi_switch_init_wsi`.
 
 This completes only the build/link/package portion of milestone 2. The NRO
 must still be run on physical hardware and show the cycling clear colour before
 Aurora/Dawn work begins.
+
+The first hardware run reached `vkEnumeratePhysicalDevices` and aborted at a
+null `vkGetPhysicalDeviceProperties2` dispatch pointer in `wsi_device_init`.
+The cause was selective extraction from switch-nvk's convenience fat archive:
+weakly referenced Vulkan entrypoints were omitted. The consumer now follows
+the reference executable recipe exactly: whole-archive only for `libnvk.a`,
+then the original support archives inside a linker group. Hardware validation
+must use the rebuilt artifact containing this correction.

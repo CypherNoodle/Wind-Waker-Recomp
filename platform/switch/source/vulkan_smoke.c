@@ -30,6 +30,13 @@ static void fail(const char* stage, VkResult result) {
     }
 }
 
+static void log_stage(const char* stage) {
+    if (log_file) {
+        fprintf(log_file, "OK: %s\n", stage);
+        fflush(log_file);
+    }
+}
+
 int main(void) {
     log_file = fopen("sdmc:/WindWakerRecomp-vulkan-smoke.log", "w");
     if (log_file) {
@@ -66,6 +73,7 @@ int main(void) {
         fail("vkCreateInstance", result);
         goto exit_loop;
     }
+    log_stage("vkCreateInstance");
 
     PFN_vkEnumeratePhysicalDevices enumerate_devices =
         LOAD_INSTANCE(instance, vkEnumeratePhysicalDevices);
@@ -92,6 +100,7 @@ int main(void) {
         fail("vkEnumeratePhysicalDevices", result);
         goto exit_loop;
     }
+    log_stage("vkEnumeratePhysicalDevices");
 
     uint32_t family_count = 0;
     get_queue_families(physical, &family_count, NULL);
@@ -131,6 +140,7 @@ int main(void) {
         fail("vkCreateDevice", result);
         goto exit_loop;
     }
+    log_stage("vkCreateDevice");
 
     PFN_vkGetDeviceQueue get_queue = LOAD_DEVICE(get_device_proc, device, vkGetDeviceQueue);
     PFN_vkCreateSwapchainKHR create_swapchain = LOAD_DEVICE(get_device_proc, device, vkCreateSwapchainKHR);
@@ -167,6 +177,7 @@ int main(void) {
         fail("vkCreateViSurfaceNN", result);
         goto exit_loop;
     }
+    log_stage("vkCreateViSurfaceNN");
 
     VkSurfaceCapabilitiesKHR caps;
     result = get_surface_caps(physical, surface, &caps);
