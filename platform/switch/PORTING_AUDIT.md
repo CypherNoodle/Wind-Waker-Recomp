@@ -6,7 +6,11 @@ graphics work can be reproduced instead of following moving branches.
 ## Product baseline
 
 - Wind-Waker-Recomp: `d102695a1847963504ea55d1cf0bc96a9fa663ec`.
-- RecompCore (`bluewake`): `8ab24daee9c641634fda5cac30389ad4b2cfda5e`.
+- RecompCore (`CypherNoodle/switch-bringup`):
+  `e2f29c540b73a09ccafc8ef283740f6bb2a4a3da`.
+- Dawn Switch (`CypherNoodle/switch-bringup`):
+  `6ab41f7a4355a5a77e35a68a5d85d7dd54b10400`, based on Aurora's pinned
+  encounter/dawn `266c1cf8de969a364afa4fa49311631fc99a881e`.
 - DolRecomp (`bluewake`): `b8b534591cba8ca7cd43943a655ee6e2591cf5de`.
 - The product Aurora is not an independent submodule. It is an owned hard fork
   vendored in RecompCore at `GXRuntime/graphics/aurora`.
@@ -155,3 +159,24 @@ objects in dependency order and returns normally through the libnx runtime.
 The resulting shutdown-test ELF has build ID
 `27bed783d78ce55a7d27a8d69fab1832a21346b0`; its 12,671,173-byte NRO has
 SHA-256 `6cc139743a6d4fc7a4727ff7d1a05b609d67ab3de63a7279780723bd1c0c4b34`.
+
+## Milestone 3 source integration
+
+The BlueWake Aurora vendor tree now has a Switch platform selection without
+replacing its renderer: libnx `NWindow` lifecycle, applet exit events,
+Joy-Con/Pro Controller PAD reads, six-axis sensor access, framebuffer aspect
+handling, and Dawn's `SurfaceSourceSwitchNWindow` descriptor. Optional desktop
+facilities (SDL windowing, ImGui, Tracy and the SQLite GPU cache) are selected
+away or isolated behind Switch-compatible interfaces; the cache remains off
+until its filesystem and locking behavior is validated separately.
+
+The public Dawn Switch patch was rebased onto Aurora's exact Dawn revision in
+the owner's fork. The resulting branch retains the static Vulkan loader,
+`VK_NN_vi_surface` swapchain creation and libnx platform guards while avoiding
+the older Dawn API mismatch. Wind-Waker-Recomp can opt into this path with
+`BLUEWAKE_SWITCH_ENABLE_AURORA`, which also applies the NVK component link
+recipe already proven by milestone 2.
+
+Per the owner's instruction, no configure, compile, link or packaging command
+was run for this milestone. Verification so far is limited to exact revision
+pins, conflict review, source/interface inspection and `git diff --check`.

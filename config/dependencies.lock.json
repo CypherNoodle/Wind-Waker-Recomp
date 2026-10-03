@@ -111,12 +111,12 @@
     },
     {
       "id": "recompcore",
-      "url": "https://github.com/elliotttate/RecompCore",
-      "sha": "8ab24daee9c641634fda5cac30389ad4b2cfda5e",
-      "branch": "bluewake",
+      "url": "https://github.com/CypherNoodle/RecompCore",
+      "sha": "e2f29c540b73a09ccafc8ef283740f6bb2a4a3da",
+      "branch": "switch-bringup",
       "license": "GPL-3.0",
-      "role": "static-recomp runtime (GXRuntime), vendored Aurora renderer at GXRuntime/graphics/aurora, Dolphin DSP donor sources, and the DolRecomp translator as the DolRecomp submodule; the product source for the iPad build (scripts/ios/build_device.sh)",
-      "verified": "2026-09-25",
+      "role": "static-recomp runtime (GXRuntime), vendored Aurora renderer at GXRuntime/graphics/aurora, Switch NWindow/input platform backend, Dolphin DSP donor sources, and the DolRecomp translator as the DolRecomp submodule; product source for Apple and Switch builds",
+      "verified": "2026-10-03",
       "upstream": {
         "url": "https://github.com/ExpansionPak/RecompCore",
         "base_sha": "5c3611e2bcb03d1578274c956bc3d7b913527ec2"
@@ -538,6 +538,20 @@
       }
     },
     {
+      "id": "dawn-switch",
+      "url": "https://github.com/CypherNoodle/dawn-switch",
+      "sha": "6ab41f7a4355a5a77e35a68a5d85d7dd54b10400",
+      "branch": "switch-bringup",
+      "license": "BSD-3-Clause",
+      "role": "Dawn/WebGPU source with libnx static-loader and VK_NN_vi_surface support, rebased onto Aurora's exact encounter/dawn revision 266c1cf8de969a364afa4fa49311631fc99a881e",
+      "verified": "2026-10-03",
+      "upstream": {
+        "url": "https://github.com/danfromtico/dawn-switch",
+        "switch_commit": "77029ea85250c9bdddfc2f88034afb6b5356a031",
+        "base_sha": "266c1cf8de969a364afa4fa49311631fc99a881e"
+      }
+    },
+    {
       "id": "aurora",
       "url": "https://github.com/encounter/aurora",
       "sha": "8b690b60e699c92e3327886ebd84cf7f05c5d36c",
@@ -564,7 +578,7 @@
         "sha": "8b690b60e699c92e3327886ebd84cf7f05c5d36c",
         "stale": false
       },
-      "vendored_in": "recompcore fork 8ab24da at GXRuntime/graphics/aurora (plain files, not a submodule); the build uses that copy with the BlueWake changes included"
+      "vendored_in": "CypherNoodle/RecompCore switch-bringup e2f29c5 at GXRuntime/graphics/aurora (plain files, not a submodule); the build uses that copy with the BlueWake changes included"
     },
     {
       "id": "sunpad",

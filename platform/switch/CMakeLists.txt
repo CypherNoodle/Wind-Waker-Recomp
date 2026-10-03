@@ -16,6 +16,16 @@ endif()
 set(BLUEWAKE_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../..")
 set(BLUEWAKE_RECOMPCORE_DIR "${BLUEWAKE_REPO_ROOT}/ref/recompcore"
     CACHE PATH "RecompCore checkout pinned by config/dependencies.lock.json")
+set(BLUEWAKE_DAWN_DIR "${BLUEWAKE_REPO_ROOT}/ref/dawn-switch"
+    CACHE PATH "dawn-switch checkout pinned by config/dependencies.lock.json")
+set(BLUEWAKE_NVK_DIR "" CACHE PATH
+    "switch-nvk install tree containing include/ and lib/libvulkan.a")
+set(BLUEWAKE_NVK_SOURCE_DIR "" CACHE PATH
+    "switch-nvk source tree used to build the pinned NVK package")
+set(BLUEWAKE_NVK_BUILD_DIR "" CACHE PATH
+    "Mesa cross-build directory produced by switch-nvk")
+option(BLUEWAKE_SWITCH_ENABLE_AURORA
+    "Stage the Aurora -> Dawn -> NVK renderer in the application target" OFF)
 
 if(NOT EXISTS "${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime/CMakeLists.txt")
     message(FATAL_ERROR
@@ -27,8 +37,13 @@ endif()
 # Aurora/Dawn renderer. Graphics is enabled only after the base AArch64 ELF/NRO
 # path has been verified with the Switch toolchain.
 set(BUILD_TESTING OFF CACHE BOOL "Do not cross-build host tests" FORCE)
-set(GXRUNTIME_ENABLE_AURORA OFF CACHE BOOL "Renderer is a later milestone" FORCE)
-set(GXRUNTIME_ENABLE_AURORA_RECOMP OFF CACHE BOOL "Renderer frontend is a later milestone" FORCE)
+if(BLUEWAKE_SWITCH_ENABLE_AURORA)
+    include(cmake/AuroraBringup.cmake)
+    bluewake_configure_switch_aurora()
+else()
+    set(GXRUNTIME_ENABLE_AURORA OFF CACHE BOOL "Renderer is opt-in during bring-up" FORCE)
+    set(GXRUNTIME_ENABLE_AURORA_RECOMP OFF CACHE BOOL "Renderer frontend is opt-in during bring-up" FORCE)
+endif()
 add_subdirectory("${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime" gxruntime)
 
 add_executable(WindWakerRecomp source/main.c)
@@ -41,6 +56,10 @@ target_compile_options(WindWakerRecomp PRIVATE
     -fdata-sections)
 target_link_options(WindWakerRecomp PRIVATE -Wl,--gc-sections)
 target_link_libraries(WindWakerRecomp PRIVATE GXRuntime::runtime nx)
+if(BLUEWAKE_SWITCH_ENABLE_AURORA)
+    target_link_libraries(WindWakerRecomp PRIVATE GXRuntime::aurora)
+    bluewake_link_switch_nvk(WindWakerRecomp)
+endif()
 
 set(BLUEWAKE_NACP "${CMAKE_CURRENT_BINARY_DIR}/WindWakerRecomp.nacp")
 set(BLUEWAKE_NRO "${CMAKE_CURRENT_BINARY_DIR}/WindWakerRecomp.nro")
@@ -71,12 +90,6 @@ add_custom_target(switch-package
 # Milestone 2 is deliberately a standalone renderer gate. It validates the
 # libnx NWindow -> VK_NN_vi_surface -> NVK swapchain path before Aurora/Dawn is
 # admitted to the application target. The large NVK build remains external.
-set(BLUEWAKE_NVK_DIR "" CACHE PATH
-    "switch-nvk install tree containing include/ and lib/libvulkan.a")
-set(BLUEWAKE_NVK_SOURCE_DIR "" CACHE PATH
-    "switch-nvk source tree used to build the pinned NVK package")
-set(BLUEWAKE_NVK_BUILD_DIR "" CACHE PATH
-    "Mesa cross-build directory produced by switch-nvk")
 if(BLUEWAKE_NVK_DIR)
     if(NOT EXISTS "${BLUEWAKE_NVK_DIR}/lib/libvulkan.a" OR
        NOT EXISTS "${BLUEWAKE_NVK_DIR}/include/vulkan/vulkan.h")

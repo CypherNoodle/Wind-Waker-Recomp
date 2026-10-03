@@ -75,6 +75,32 @@ directory from `BLUEWAKE_NVK_DIR`. They can be overridden with
 the original component archives because Mesa's weak Vulkan dispatch references
 must not be resolved by selective extraction from the convenience fat archive.
 
+## Milestone 3: Aurora/Dawn source integration
+
+The source-side renderer path is now staged behind
+`BLUEWAKE_SWITCH_ENABLE_AURORA`. It selects the libnx `NWindow` and PAD
+backends from `CypherNoodle/RecompCore`, builds the pinned
+`CypherNoodle/dawn-switch` source, and attaches the same component-archive NVK
+recipe that passed the hardware clear/present gate.
+
+The exact RecompCore and Dawn revisions are recorded in
+`config/dependencies.lock.json`. Check Dawn out at `ref/dawn-switch`, then a
+future renderer build can be configured with:
+
+```sh
+platform/switch/build.sh \
+  -DBLUEWAKE_SWITCH_ENABLE_AURORA=ON \
+  -DBLUEWAKE_DAWN_DIR=/path/to/dawn-switch \
+  -DBLUEWAKE_NVK_DIR=/path/to/switch-nvk/nvk-switch \
+  -DBLUEWAKE_NVK_SOURCE_DIR=/path/to/switch-nvk \
+  -DBLUEWAKE_NVK_BUILD_DIR=/path/to/switch-nvk/mb
+```
+
+This integration has intentionally not been compiled yet. It is a source
+milestone, not a claim that Aurora or translated gameplay renders on hardware.
+The default remains the verified GXRuntime bring-up target until the next build
+is explicitly authorized.
+
 ## Continuous integration
 
 `.github/workflows/switch.yml` follows the PaperBoat-nx Switch workflow: it
