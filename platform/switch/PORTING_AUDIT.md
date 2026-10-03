@@ -145,3 +145,13 @@ weakly referenced Vulkan entrypoints were omitted. The consumer now follows
 the reference executable recipe exactly: whole-archive only for `libnvk.a`,
 then the original support archives inside a linker group. Hardware validation
 must use the rebuilt artifact containing this correction.
+
+The corrected build was validated on physical hardware on 2026-10-03. It
+created a 1280x720 three-image swapchain and presented 590 frames while cycling
+the clear colour from blue to red and back. This passes the graphics portion of
+milestone 2. The test subsequently reported an error while leaving through the
+direct `svcExitProcess` path, so the smoke application now destroys its Vulkan
+objects in dependency order and returns normally through the libnx runtime.
+The resulting shutdown-test ELF has build ID
+`27bed783d78ce55a7d27a8d69fab1832a21346b0`; its 12,671,173-byte NRO has
+SHA-256 `6cc139743a6d4fc7a4727ff7d1a05b609d67ab3de63a7279780723bd1c0c4b34`.

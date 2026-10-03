@@ -80,6 +80,8 @@ int main(void) {
     PFN_vkGetPhysicalDeviceQueueFamilyProperties get_queue_families =
         LOAD_INSTANCE(instance, vkGetPhysicalDeviceQueueFamilyProperties);
     PFN_vkCreateDevice create_device = LOAD_INSTANCE(instance, vkCreateDevice);
+    PFN_vkDestroyInstance destroy_instance = LOAD_INSTANCE(instance, vkDestroyInstance);
+    PFN_vkDestroySurfaceKHR destroy_surface = LOAD_INSTANCE(instance, vkDestroySurfaceKHR);
     PFN_vkGetDeviceProcAddr get_device_proc = LOAD_INSTANCE(instance, vkGetDeviceProcAddr);
     PFN_vkCreateViSurfaceNN create_vi_surface = LOAD_INSTANCE(instance, vkCreateViSurfaceNN);
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR get_surface_caps =
@@ -87,6 +89,7 @@ int main(void) {
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR get_surface_formats =
         LOAD_INSTANCE(instance, vkGetPhysicalDeviceSurfaceFormatsKHR);
     if (!enumerate_devices || !get_queue_families || !create_device ||
+        !destroy_instance || !destroy_surface ||
         !get_device_proc || !create_vi_surface || !get_surface_caps ||
         !get_surface_formats) {
         fail("Vulkan instance dispatch", VK_ERROR_INITIALIZATION_FAILED);
@@ -157,10 +160,15 @@ int main(void) {
     PFN_vkQueueSubmit submit = LOAD_DEVICE(get_device_proc, device, vkQueueSubmit);
     PFN_vkQueueWaitIdle wait_idle = LOAD_DEVICE(get_device_proc, device, vkQueueWaitIdle);
     PFN_vkCreateSemaphore create_semaphore = LOAD_DEVICE(get_device_proc, device, vkCreateSemaphore);
+    PFN_vkDestroySemaphore destroy_semaphore = LOAD_DEVICE(get_device_proc, device, vkDestroySemaphore);
+    PFN_vkDestroyCommandPool destroy_pool = LOAD_DEVICE(get_device_proc, device, vkDestroyCommandPool);
+    PFN_vkDestroySwapchainKHR destroy_swapchain = LOAD_DEVICE(get_device_proc, device, vkDestroySwapchainKHR);
+    PFN_vkDestroyDevice destroy_device = LOAD_DEVICE(get_device_proc, device, vkDestroyDevice);
     if (!get_queue || !create_swapchain || !get_images || !acquire_image ||
         !present || !create_pool || !allocate_commands || !reset_command ||
         !begin_command || !barrier || !clear_image || !end_command || !submit ||
-        !wait_idle || !create_semaphore) {
+        !wait_idle || !create_semaphore || !destroy_semaphore || !destroy_pool ||
+        !destroy_swapchain || !destroy_device) {
         fail("Vulkan device dispatch", VK_ERROR_INITIALIZATION_FAILED);
         goto exit_loop;
     }
@@ -349,9 +357,19 @@ int main(void) {
     }
     if (log_file) {
         fprintf(log_file, "present loop ended after %u frames with result %d\n", frame, result);
-        fclose(log_file);
+        fflush(log_file);
     }
-    svcExitProcess();
+    wait_idle(queue);
+    destroy_semaphore(device, rendered, NULL);
+    destroy_semaphore(device, acquired, NULL);
+    destroy_pool(device, pool, NULL);
+    destroy_swapchain(device, swapchain, NULL);
+    destroy_surface(instance, surface, NULL);
+    destroy_device(device, NULL);
+    destroy_instance(instance, NULL);
+    log_stage("clean Vulkan shutdown");
+    if (log_file) fclose(log_file);
+    return 0;
 
 exit_loop:
     ;
@@ -363,5 +381,5 @@ exit_loop:
         if (padGetButtonsDown(&exit_pad) & HidNpadButton_Plus) break;
     }
     if (log_file) fclose(log_file);
-    return 1;
+    return 0;
 }
