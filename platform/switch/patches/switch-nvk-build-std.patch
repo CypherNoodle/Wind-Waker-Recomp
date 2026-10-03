@@ -1,0 +1,30 @@
+diff --git a/build-std-sysroot.sh b/build-std-sysroot.sh
+index 8f8139b..0bceae3 100644
+--- a/build-std-sysroot.sh
++++ b/build-std-sysroot.sh
+@@ -15,10 +15,11 @@ cargo +nightly build --release -Zbuild-std=core,alloc,std,panic_abort --target "
+ 
+ # 2. Assemble a sysroot: copy host sysroot structure for the target, then overlay our built std rlibs.
+-DEPS=/tmp/stdsr/target/$TGT/release/deps
++RELEASE=/tmp/stdsr/target/$TGT/release
+ mkdir -p "$SYSROOT/lib/rustlib/$TGT/lib"
+ # seed with the host's bin/ (rustc/lld) via symlink-free copy of the target lib only
+-cp -f "$DEPS"/*.rlib "$SYSROOT/lib/rustlib/$TGT/lib/" 2>/dev/null || true
+-cp -f "$DEPS"/*.rmeta "$SYSROOT/lib/rustlib/$TGT/lib/" 2>/dev/null || true
++# Newer Cargo versions may place build-std outputs below release/build.
++find "$RELEASE" -type f \( -name '*.rlib' -o -name '*.rmeta' \) \
++  -exec cp -f {} "$SYSROOT/lib/rustlib/$TGT/lib/" \;
+ # rustc also needs the target's self-contained objects + the host toolchain bits: symlink host sysroot for everything else
+ for d in "$RUSTC_SYSROOT/lib/rustlib"/*; do
+   b=$(basename "$d");
+@@ -32,8 +33,8 @@ echo "=== sysroot std rlibs ==="; ls "$SYSROOT/lib/rustlib/$TGT/lib/" | grep -E
+ # 3. Validate: plain rustc with --sysroot (NO build-std) compiles a std crate.
+ cd /tmp && printf 'fn main(){let v=vec![1,2,3];println!("{}",v.len());}\n' > t.rs
+ echo "=== plain rustc --sysroot test (no build-std) ==="
+-if rustc --target "$TGT" --sysroot "$SYSROOT" -C panic=abort t.rs -o /tmp/t 2>&1 | grep -q error; then
+-  rustc --target "$TGT" --sysroot "$SYSROOT" -C panic=abort t.rs -o /tmp/t 2>&1 | tail -15
++if rustc -Zunstable-options --target "$TGT" --sysroot "$SYSROOT" -C panic=abort t.rs -o /tmp/t 2>&1 | grep -q error; then
++  rustc -Zunstable-options --target "$TGT" --sysroot "$SYSROOT" -C panic=abort t.rs -o /tmp/t 2>&1 | tail -15
+   echo "SYSROOT TEST: FAIL"
+ else
+   echo "SYSROOT TEST: OK (rustc finds std via prebuilt sysroot)"

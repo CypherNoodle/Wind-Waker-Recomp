@@ -35,7 +35,23 @@ function(bluewake_configure_switch_aurora)
     set(AURORA_ENABLE_DVD OFF CACHE BOOL "Disc access is owned by the host" FORCE)
     set(AURORA_ENABLE_CARD OFF CACHE BOOL "Memory card access is owned by GXRuntime" FORCE)
 
+    # Dawn's IR serialization and GLSL validation tools are host/developer
+    # facilities. They pull protobuf and glslang into the cross build but are
+    # not used by Aurora's runtime WGSL -> SPIR-V path on Switch.
+    set(DAWN_BUILD_PROTOBUF OFF CACHE BOOL "No protobuf in the NRO build" FORCE)
+    set(DAWN_ENABLE_NULL OFF CACHE BOOL "Vulkan is the only Switch backend" FORCE)
+    set(TINT_BUILD_IR_BINARY OFF CACHE BOOL "No Tint IR serialization" FORCE)
+    set(TINT_BUILD_GLSL_VALIDATOR OFF CACHE BOOL "No GLSL validator" FORCE)
+    set(TINT_BUILD_SPV_READER OFF CACHE BOOL "Aurora supplies WGSL on Switch" FORCE)
+    set(TINT_BUILD_WGSL_WRITER OFF CACHE BOOL "Switch emits SPIR-V only" FORCE)
+    set(TINT_BUILD_NULL_WRITER OFF CACHE BOOL "No Null backend on Switch" FORCE)
+
     add_compile_definitions(__SWITCH__ NX VK_USE_PLATFORM_VI_NN)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # GCC emits a -Wpsabi note for nearly every Tint translation unit when
+        # targeting AArch64. It is informational and can swamp the build log.
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-psabi>)
+    endif()
     include_directories(BEFORE SYSTEM "${BLUEWAKE_NVK_DIR}/include")
 endfunction()
 

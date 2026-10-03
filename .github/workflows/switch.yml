@@ -1,0 +1,154 @@
+name: Switch Aurora bring-up
+
+on:
+  push:
+    branches: [switch-bringup]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: switch-aurora-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aurora-gate:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/hayatog/switch-nvk-build:latest
+    timeout-minutes: 180
+    env:
+      RECOMPCORE_SHA: 83611d9ca4cc8c435d02f6f5f5d4f4e310e33559
+      DAWN_SHA: c70c486ec5b441001e6578c186a275eb590c5352
+      SWITCH_NVK_SHA: 6eec707da3ad5f86c64f748226583202801bfd03
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify the Switch toolchain
+        run: |
+          export PATH="$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH"
+          aarch64-none-elf-g++ --version
+          cmake --version
+          ninja --version
+          rustc --version
+          test -f "$DEVKITPRO/cmake/Switch.cmake"
+
+      - name: Fetch pinned renderer sources
+        run: |
+          mkdir -p deps
+          git clone --filter=blob:none https://github.com/CypherNoodle/RecompCore.git deps/RecompCore
+          git -C deps/RecompCore checkout --detach "$RECOMPCORE_SHA"
+          git clone --filter=blob:none https://github.com/CypherNoodle/dawn-switch.git deps/dawn-switch
+          git -C deps/dawn-switch checkout --detach "$DAWN_SHA"
+          deps/dawn-switch/tools/prepare_switch_dependencies.sh
+          git clone --filter=blob:none https://github.com/HayatoG/switch-nvk.git deps/switch-nvk
+          git -C deps/switch-nvk checkout --detach "$SWITCH_NVK_SHA"
+          git -C deps/switch-nvk apply "$GITHUB_WORKSPACE/platform/switch/patches/switch-nvk-build-std.patch"
+
+      - name: Restore NVK build cache
+        id: nvk-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps/switch-nvk/mesa-25
+            deps/switch-nvk/native-tools
+            deps/switch-nvk/native-prefix
+            deps/switch-nvk/sysroot
+            deps/switch-nvk/mb
+            deps/switch-nvk/nvk-switch
+          key: switch-nvk-${{ env.SWITCH_NVK_SHA }}-${{ hashFiles('platform/switch/patches/switch-nvk-build-std.patch') }}
+
+      - name: Prepare Mesa NVK source
+        if: steps.nvk-cache.outputs.cache-hit != 'true'
+        run: |
+          cd deps/switch-nvk
+          curl -fL https://archive.mesa3d.org/mesa-25.0.7.tar.xz -o mesa-25.0.7.tar.xz
+          tar -xf mesa-25.0.7.tar.xz
+          mv mesa-25.0.7 mesa-25
+          ln -s "$GITHUB_WORKSPACE/deps/switch-nvk" /work
+          bash apply-patches.sh
+
+      - name: Build Mesa NVK archives
+        if: steps.nvk-cache.outputs.cache-hit != 'true'
+        run: |
+          cd deps/switch-nvk
+          test -e /work || ln -s "$GITHUB_WORKSPACE/deps/switch-nvk" /work
+          export NATIVE_PREFIX=/work/native-prefix
+          export PATH="/work/native-prefix/bin:$PATH"
+          export BUILD=/work/mb
+          bash build-native-tools.sh
+          bash build-std-sysroot.sh
+          bash configure-mesa.sh
+          set +e
+          ninja -C mb -j "$(nproc)"
+          set -e
+          required=(
+            src/nouveau/vulkan/libnvk.a
+            src/nouveau/codegen/libnouveau_codegen.a
+            src/util/libmesa_util.a
+            src/nouveau/compiler/libnak.a
+            src/nouveau/compiler/libnak_rs.a
+            src/compiler/nir/libnir.a
+            src/vulkan/util/libvulkan_util.a
+            src/compiler/spirv/libvtn.a
+          )
+          for archive in "${required[@]}"; do
+            test -s "mb/$archive"
+          done
+          bash package-nvk.sh
+
+      - name: Verify pinned dependency revisions
+        run: |
+          test "$(git -C deps/RecompCore rev-parse HEAD)" = "$RECOMPCORE_SHA"
+          test "$(git -C deps/dawn-switch rev-parse HEAD)" = "$DAWN_SHA"
+          test "$(git -C deps/switch-nvk rev-parse HEAD)" = "$SWITCH_NVK_SHA"
+          test -s deps/switch-nvk/mb/src/nouveau/vulkan/libnvk.a
+          test -s deps/switch-nvk/nvk-switch/lib/libvulkan.a
+
+      - name: Configure Aurora gate
+        run: |
+          export PATH="$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH"
+          cmake -S platform/switch -B build/switch-aurora -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$DEVKITPRO/cmake/Switch.cmake" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBLUEWAKE_RECOMPCORE_DIR="$GITHUB_WORKSPACE/deps/RecompCore" \
+            -DBLUEWAKE_SWITCH_ENABLE_AURORA=ON \
+            -DBLUEWAKE_DAWN_DIR="$GITHUB_WORKSPACE/deps/dawn-switch" \
+            -DBLUEWAKE_NVK_DIR="$GITHUB_WORKSPACE/deps/switch-nvk/nvk-switch" \
+            -DBLUEWAKE_NVK_SOURCE_DIR="$GITHUB_WORKSPACE/deps/switch-nvk" \
+            -DBLUEWAKE_NVK_BUILD_DIR="$GITHUB_WORKSPACE/deps/switch-nvk/mb"
+
+      - name: Build Aurora gate package
+        run: |
+          export PATH="$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH"
+          cmake --build build/switch-aurora --target switch-package --parallel "$(nproc)"
+
+      - name: Verify package
+        run: |
+          nro=build/switch-aurora/switch/WindWakerRecomp/WindWakerRecomp.nro
+          elf=build/switch-aurora/WindWakerRecomp
+          test -s "$nro"
+          test -s "$elf"
+          file "$elf" "$nro"
+          aarch64-none-elf-readelf -h "$elf"
+          sha256sum "$elf" "$nro"
+
+      - name: Upload Aurora gate
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindWakerRecomp-Aurora-switch-bringup
+          path: build/switch-aurora/switch/WindWakerRecomp/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WindWakerRecomp-Aurora-build-diagnostics
+          path: |
+            build/switch-aurora/CMakeCache.txt
+            build/switch-aurora/.ninja_log
+            build/switch-aurora/CMakeFiles/CMakeOutput.log
+          if-no-files-found: ignore
+          retention-days: 7
