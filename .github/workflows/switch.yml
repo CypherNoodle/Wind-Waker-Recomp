@@ -130,9 +130,9 @@ jobs:
           export NATIVE_PREFIX=/work/native-prefix
           export PATH="/work/native-prefix/bin:$PATH"
           export BUILD=/work/mb
-          bash build-native-tools.sh
+          (cd mesa-25 && bash ../build-native-tools.sh)
           bash build-std-sysroot.sh
-          bash configure-mesa.sh
+          (cd mesa-25 && bash ../configure-mesa.sh)
           set +e
           ninja -C mb -j "$(nproc)"
           set -e
