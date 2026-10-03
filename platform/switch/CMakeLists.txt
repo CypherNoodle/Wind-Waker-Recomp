@@ -46,8 +46,17 @@ else()
 endif()
 add_subdirectory("${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime" gxruntime)
 
-add_executable(WindWakerRecomp source/main.c)
-target_compile_features(WindWakerRecomp PRIVATE c_std_11)
+if(BLUEWAKE_SWITCH_ENABLE_AURORA)
+    set(BLUEWAKE_SWITCH_MAIN source/aurora_gate.cpp)
+else()
+    set(BLUEWAKE_SWITCH_MAIN source/main.c)
+endif()
+add_executable(WindWakerRecomp "${BLUEWAKE_SWITCH_MAIN}")
+if(BLUEWAKE_SWITCH_ENABLE_AURORA)
+    target_compile_features(WindWakerRecomp PRIVATE cxx_std_20)
+else()
+    target_compile_features(WindWakerRecomp PRIVATE c_std_11)
+endif()
 target_compile_options(WindWakerRecomp PRIVATE
     -Wall
     -Wextra

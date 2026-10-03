@@ -112,10 +112,10 @@
     {
       "id": "recompcore",
       "url": "https://github.com/CypherNoodle/RecompCore",
-      "sha": "e2f29c540b73a09ccafc8ef283740f6bb2a4a3da",
+      "sha": "7ddd38636473a5ab7b5b0933881a4dfc8312154f",
       "branch": "switch-bringup",
       "license": "GPL-3.0",
-      "role": "static-recomp runtime (GXRuntime), vendored Aurora renderer at GXRuntime/graphics/aurora, Switch NWindow/input platform backend, Dolphin DSP donor sources, and the DolRecomp translator as the DolRecomp submodule; product source for Apple and Switch builds",
+      "role": "static-recomp runtime (GXRuntime), vendored Aurora renderer at GXRuntime/graphics/aurora, Switch NWindow/input and audren output backends, Dolphin DSP donor sources, and the DolRecomp translator as the DolRecomp submodule; product source for Apple and Switch builds",
       "verified": "2026-10-03",
       "upstream": {
         "url": "https://github.com/ExpansionPak/RecompCore",
@@ -578,7 +578,7 @@
         "sha": "8b690b60e699c92e3327886ebd84cf7f05c5d36c",
         "stale": false
       },
-      "vendored_in": "CypherNoodle/RecompCore switch-bringup e2f29c5 at GXRuntime/graphics/aurora (plain files, not a submodule); the build uses that copy with the BlueWake changes included"
+      "vendored_in": "CypherNoodle/RecompCore switch-bringup 7ddd386 at GXRuntime/graphics/aurora (plain files, not a submodule); the build uses that copy with the BlueWake changes included"
     },
     {
       "id": "sunpad",

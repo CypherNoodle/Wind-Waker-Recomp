@@ -7,7 +7,7 @@ graphics work can be reproduced instead of following moving branches.
 
 - Wind-Waker-Recomp: `d102695a1847963504ea55d1cf0bc96a9fa663ec`.
 - RecompCore (`CypherNoodle/switch-bringup`):
-  `e2f29c540b73a09ccafc8ef283740f6bb2a4a3da`.
+  `7ddd38636473a5ab7b5b0933881a4dfc8312154f`.
 - Dawn Switch (`CypherNoodle/switch-bringup`):
   `6ab41f7a4355a5a77e35a68a5d85d7dd54b10400`, based on Aurora's pinned
   encounter/dawn `266c1cf8de969a364afa4fa49311631fc99a881e`.
@@ -170,12 +170,25 @@ facilities (SDL windowing, ImGui, Tracy and the SQLite GPU cache) are selected
 away or isolated behind Switch-compatible interfaces; the cache remains off
 until its filesystem and locking behavior is validated separately.
 
+The same RecompCore branch now supplies a real libnx `audren` output sink for
+Aurora's signed-16 stereo stream: a bounded PCM ring, four cache-flushed wave
+buffers, an audio worker, 32/48 kHz voice reconfiguration and ordered shutdown.
+It replaces the previously missing SDL-audio surface rather than satisfying it
+with silent link stubs. Hardware audio validation remains pending.
+
 The public Dawn Switch patch was rebased onto Aurora's exact Dawn revision in
 the owner's fork. The resulting branch retains the static Vulkan loader,
 `VK_NN_vi_surface` swapchain creation and libnx platform guards while avoiding
 the older Dawn API mismatch. Wind-Waker-Recomp can opt into this path with
 `BLUEWAKE_SWITCH_ENABLE_AURORA`, which also applies the NVK component link
 recipe already proven by milestone 2.
+
+The opt-in Switch executable now has a dedicated Aurora gate entry point. It
+sets NVK's explicit GM20B opt-in, calls `dol_aurora_initialize`, advances the
+backend through `dol_platform_present`, handles `+`, and calls
+`dol_aurora_shutdown` while logging each boundary to the SD card. It contains
+no substitute renderer and no game-data path; its purpose is to isolate the
+first full Aurora/Dawn frame before translated code is introduced.
 
 Per the owner's instruction, no configure, compile, link or packaging command
 was run for this milestone. Verification so far is limited to exact revision

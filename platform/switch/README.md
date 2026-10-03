@@ -82,6 +82,11 @@ The source-side renderer path is now staged behind
 backends from `CypherNoodle/RecompCore`, builds the pinned
 `CypherNoodle/dawn-switch` source, and attaches the same component-archive NVK
 recipe that passed the hardware clear/present gate.
+When enabled, the application selects `source/aurora_gate.cpp`: it initializes
+the real GXRuntime Aurora backend, presents empty GX frames through Dawn/NVK,
+and records startup, first-present and ordered shutdown to
+`sdmc:/WindWakerRecomp-aurora-gate.log`. This is the next hardware gate before
+translated game code is admitted.
 
 The exact RecompCore and Dawn revisions are recorded in
 `config/dependencies.lock.json`. Check Dawn out at `ref/dawn-switch`, then a
