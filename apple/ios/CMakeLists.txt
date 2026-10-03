@@ -24,6 +24,7 @@ add_subdirectory(${GXRUNTIME_DIR} gxruntime_build EXCLUDE_FROM_ALL)
 
 set(BLUEWAKE_HOST_SOURCES
     ${BLUEWAKE_HOST_SRC}/main.c
+    ${BLUEWAKE_HOST_SRC}/module_symbols.c
     ${BLUEWAKE_HOST_SRC}/aram_dma.c
     ${BLUEWAKE_HOST_SRC}/audio_capture.c
     ${BLUEWAKE_HOST_SRC}/ipl_sram.c

@@ -1,6 +1,6 @@
 #include "game_options.h"
+#include "module_symbols.h"
 
-#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -154,11 +154,16 @@ void bluewake_game_options_enable(void* lib, CPUState* cpu, bool mod_enabled) {
     typedef void (*SetHookFn)(NativeHookFn);
     typedef u32 (*CountFn)(void);
     typedef u32 (*WritesFn)(OptionWriteFn, void*);
-    FlagsFn flags = (FlagsFn)dlsym(lib, "bluewake_composite_option_flags");
-    SetHookFn set_hook = (SetHookFn)dlsym(lib, "bluewake_composite_set_native_hook");
-    CountFn count = (CountFn)dlsym(lib, "bluewake_composite_option_count");
-    OptionFn option = (OptionFn)dlsym(lib, "bluewake_composite_option");
-    WritesFn writes = (WritesFn)dlsym(lib, "bluewake_composite_option_writes");
+    FlagsFn flags = (FlagsFn)bluewake_module_symbol(
+        lib, "bluewake_composite_option_flags");
+    SetHookFn set_hook = (SetHookFn)bluewake_module_symbol(
+        lib, "bluewake_composite_set_native_hook");
+    CountFn count = (CountFn)bluewake_module_symbol(
+        lib, "bluewake_composite_option_count");
+    OptionFn option = (OptionFn)bluewake_module_symbol(
+        lib, "bluewake_composite_option");
+    WritesFn writes = (WritesFn)bluewake_module_symbol(
+        lib, "bluewake_composite_option_writes");
     const u32 options = count ? count() : 0u;
     if (flags == NULL || set_hook == NULL || option == NULL || options == 0u)
         return;

@@ -46,11 +46,11 @@
 #include <aurora/gfx.h>
 #include "external_memory.h"
 #include "fpu_context.h"
+#include "module_symbols.h"
 #ifdef BLUEWAKE_HAS_DSP_ADAPTER
 #include "dsp_adapter_c.h"
 #endif
 
-#include <dlfcn.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <stdio.h>
@@ -159,6 +159,14 @@ static bool host_add_shared_guest_alias(u32 linked_start, u32 size,
     pthread_mutex_unlock(&g_guest_alias_lock);
     if (!added)
         return false;
+#if BLUEWAKE_STATIC_MODULE
+    // Static composites use this same GXRuntime CPU instance. Registering the
+    // storage again through the old dylib bridge would be a duplicate.
+    if (g_state_alias_count < HOST_STATE_MAX_ALIASES)
+        g_state_aliases[g_state_alias_count++] =
+            (HostStateAlias){linked_start, size};
+    return true;
+#else
     if (g_module_alias_add_shared(linked_start, size, storage)) {
         if (g_state_alias_count < HOST_STATE_MAX_ALIASES)
             g_state_aliases[g_state_alias_count++] =
@@ -170,6 +178,7 @@ static bool host_add_shared_guest_alias(u32 linked_start, u32 size,
     g_guest_alias_changes++;
     pthread_mutex_unlock(&g_guest_alias_lock);
     return false;
+#endif
 }
 
 // The composite keeps REL code/data at deterministic linked addresses;
@@ -750,10 +759,10 @@ static void host_mods_enable(void* lib, CPUState* cpu) {
     typedef u32 (*CountFn)(void);
     typedef const char* (*NameFn)(u32);
     typedef u32 (*ApplyFn)(u32);
-    CountFn count = (CountFn)dlsym(lib, "bluewake_composite_mod_count");
-    NameFn name = (NameFn)dlsym(lib, "bluewake_composite_mod_name");
-    ApplyFn apply = (ApplyFn)dlsym(lib, "bluewake_composite_apply_mods");
-    g_mod_writes = (ModWritesFn)dlsym(lib, "bluewake_composite_mod_writes");
+    CountFn count = (CountFn)bluewake_module_symbol(lib, "bluewake_composite_mod_count");
+    NameFn name = (NameFn)bluewake_module_symbol(lib, "bluewake_composite_mod_name");
+    ApplyFn apply = (ApplyFn)bluewake_module_symbol(lib, "bluewake_composite_apply_mods");
+    g_mod_writes = (ModWritesFn)bluewake_module_symbol(lib, "bluewake_composite_mod_writes");
     const u32 available = count ? count() : 0u;
     const char* wanted = getenv("BLUEWAKE_MODS");
     char list[256] = "";
@@ -6499,11 +6508,18 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    void* lib = dlopen(dylib_path, RTLD_NOW | RTLD_LOCAL);
-    if (!lib) { fprintf(stderr, "dlopen: %s\n", dlerror()); return 1; }
+    void* lib = bluewake_module_open(dylib_path);
+    if (!lib) {
+        fprintf(stderr, "module open: %s\n", bluewake_module_error());
+        return 1;
+    }
 
-    GetModuleFn get_module = (GetModuleFn)dlsym(lib, "staticrecomp_get_module");
-    if (!get_module) { fprintf(stderr, "dlsym: %s\n", dlerror()); return 1; }
+    GetModuleFn get_module =
+        (GetModuleFn)bluewake_module_symbol(lib, "staticrecomp_get_module");
+    if (!get_module) {
+        fprintf(stderr, "module symbol: %s\n", bluewake_module_error());
+        return 1;
+    }
 
     const StaticRecompModuleDesc* mod = get_module();
     if (!mod) { fprintf(stderr, "module desc is NULL\n"); return 1; }
@@ -7035,10 +7051,16 @@ int main(int argc, char** argv) {
             long long seconds = 0;
             if (strcmp(clock_env, "now") == 0) {
                 const time_t now = time(NULL);
+#if defined(__SWITCH__)
+                // Horizon exposes UTC through newlib. A timezone database is
+                // not part of the NRO, so avoid non-standard tm_gmtoff here.
+                seconds = (long long)now - 946684800ll;
+#else
                 struct tm local;
                 localtime_r(&now, &local);
                 seconds = (long long)now + (long long)local.tm_gmtoff -
                           946684800ll;
+#endif
             } else {
                 char* clock_end = NULL;
                 seconds = strtoll(clock_env, &clock_end, 10);
@@ -7080,16 +7102,26 @@ int main(int argc, char** argv) {
     }
 #endif
 
-    GetRelDataFn get_rel_data = (GetRelDataFn)dlsym(lib, "staticrecomp_get_rel_data");
+    GetRelDataFn get_rel_data =
+        (GetRelDataFn)bluewake_module_symbol(lib, "staticrecomp_get_rel_data");
     u32 rel_data_count = 0u;
     const BlueWakeRelData* rel_data = get_rel_data ? get_rel_data(&rel_data_count) : NULL;
     g_rel_data = rel_data;
     g_rel_data_count = rel_data_count;
     if (rel_data) {
-        GuestAliasClearFn module_alias_clear =
-            (GuestAliasClearFn)dlsym(lib, "ppc_guest_alias_clear");
-        GuestAliasAddSharedFn module_alias_add_shared =
-            (GuestAliasAddSharedFn)dlsym(lib, "ppc_guest_alias_add_shared");
+        GuestAliasClearFn module_alias_clear = NULL;
+        GuestAliasAddSharedFn module_alias_add_shared = NULL;
+#if !BLUEWAKE_STATIC_MODULE
+        module_alias_clear = (GuestAliasClearFn)bluewake_module_symbol(
+            lib, "ppc_guest_alias_clear");
+        module_alias_add_shared = (GuestAliasAddSharedFn)bluewake_module_symbol(
+            lib, "ppc_guest_alias_add_shared");
+#else
+        // The statically linked composite and host share GXRuntime's one alias
+        // registry, so no second module-side bridge exists or is needed.
+        module_alias_clear = ppc_guest_alias_clear;
+        module_alias_add_shared = ppc_guest_alias_add_shared;
+#endif
         g_module_alias_add_shared = module_alias_add_shared;
         if (module_alias_clear == NULL || module_alias_add_shared == NULL) {
             fprintf(stderr, "[rel] composite is missing guest-data alias ABI\n");
@@ -7255,7 +7287,8 @@ int main(int argc, char** argv) {
         g_audio_object_watch) {
         ppc_set_mem_write_journal(heap_write_watch, &cpu);
         SetMemWriteJournalFn set_module_journal =
-            (SetMemWriteJournalFn)dlsym(lib, "bluewake_set_mem_write_journal");
+            (SetMemWriteJournalFn)bluewake_module_symbol(
+                lib, "bluewake_set_mem_write_journal");
         fprintf(stderr, "[heap-journal] module-bridge=%s\n",
                 set_module_journal ? "installed" : "missing");
         if (set_module_journal)
@@ -7274,7 +7307,8 @@ int main(int argc, char** argv) {
         g_chassis_service_each_block =
             getenv("BLUEWAKE_CHASSIS_SERVICE") != NULL;
         SetEdgeServiceFn set_edge_service =
-            (SetEdgeServiceFn)dlsym(lib, "bluewake_set_edge_service");
+            (SetEdgeServiceFn)bluewake_module_symbol(
+                lib, "bluewake_set_edge_service");
         fprintf(stderr, "[chassis] edge-service=%s\n",
                 set_edge_service ? "installed" : "missing");
         if (g_chassis_service_each_block)

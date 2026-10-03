@@ -12,10 +12,16 @@
 //   BLUEWAKE_SPRINT_TRACE=1            log it and Link's speed
 //   BLUEWAKE_SPRINT_TEST=retrace:n     testing: Shift held for n retraces
 
+#if defined(__SWITCH__)
+static inline void bluewake_sprint_attach(CPUState* cpu) { (void)cpu; }
+static inline void bluewake_sprint_retrace(void) {}
+static inline void bluewake_sprint_reload(void) {}
+#else
 void bluewake_sprint_attach(CPUState* cpu);
 // Once per retrace, on the thread that pumps SDL's events.
 void bluewake_sprint_retrace(void);
 // Reads BLUEWAKE_SPRINT_SPEED again (the options menu).
 void bluewake_sprint_reload(void);
+#endif
 
 #endif

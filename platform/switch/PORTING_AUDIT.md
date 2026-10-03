@@ -190,6 +190,21 @@ backend through `dol_platform_present`, handles `+`, and calls
 no substitute renderer and no game-data path; its purpose is to isolate the
 first full Aurora/Dawn frame before translated code is introduced.
 
+The next source-only gate is staged behind `BLUEWAKE_SWITCH_ENABLE_GAME`.
+`cmake/composite` can emit a static target without embedding a second copy of
+GXRuntime's CPU core, and `runtime/host` now resolves either dylib exports or
+statically linked exports through one module-symbol interface. This is required
+for a Horizon NRO and keeps the guest-alias registry shared between generated
+code and the host.
+
+The libnx entry point fixes only SD paths and platform defaults. User-owned
+`main.dol`, RELs and the GZLE01 disc stay external, and CMake rejects a composite
+whose DOL translation contains native host objects instead of portable C. The
+full host reuses the existing MEM1/ARAM, device clock, SI, DI, audio and card
+services; desktop UI/input extensions are excluded for this first admission.
+This gate has received static review only and has not been configured, compiled,
+linked, packaged or run on hardware.
+
 Per the owner's instruction, no configure, compile, link or packaging command
 was run for this milestone. Verification so far is limited to exact revision
 pins, conflict review, source/interface inspection and `git diff --check`.

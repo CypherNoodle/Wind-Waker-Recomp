@@ -40,6 +40,27 @@
 //   BLUEWAKE_STICK_CAMERA_INVERT_X=1, _INVERT_Y=1  reverse its left and right, up and down
 //   BLUEWAKE_STICK_TEST=r:x:y:n[:click[:zoom[:left_y]]],...  testing: the sticks and D-pad from r for n
 
+#if defined(__SWITCH__)
+// Desktop mouse/right-stick camera integration depends on SDL window APIs.
+// Keep the host ABI present on Switch while native PAD owns input there.
+static inline void bluewake_mouse_camera_install(void) {}
+static inline void bluewake_mouse_camera_attach(CPUState* cpu) { (void)cpu; }
+static inline void bluewake_mouse_camera_retrace(void) {}
+static inline void bluewake_mouse_camera_hook(CPUState* cpu, u32 address) {
+    (void)cpu;
+    (void)address;
+}
+static inline void bluewake_mouse_camera_dispatch(CPUState* cpu, u32 address) {
+    (void)cpu;
+    (void)address;
+}
+static inline void bluewake_mouse_camera_pad(DolPadState* pad) { (void)pad; }
+static inline bool bluewake_mouse_camera_scripted(void) { return false; }
+static inline bool bluewake_mouse_camera_captured(void) { return false; }
+static inline void bluewake_mouse_camera_release(void) {}
+static inline void bluewake_mouse_camera_reload(void) {}
+#else
+
 // Once, after the Aurora window exists.
 void bluewake_mouse_camera_install(void);
 // Once the guest is running (the camera's state is in its memory).
@@ -75,5 +96,7 @@ void bluewake_mouse_camera_release(void);
 // Reads BLUEWAKE_MOUSE_CAMERA, _SENSITIVITY and _INVERT_Y, and the
 // BLUEWAKE_STICK_CAMERA settings, again (the options menu).
 void bluewake_mouse_camera_reload(void);
+
+#endif
 
 #endif

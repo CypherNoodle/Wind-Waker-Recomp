@@ -26,6 +26,15 @@ set(BLUEWAKE_NVK_BUILD_DIR "" CACHE PATH
     "Mesa cross-build directory produced by switch-nvk")
 option(BLUEWAKE_SWITCH_ENABLE_AURORA
     "Stage the Aurora -> Dawn -> NVK renderer in the application target" OFF)
+option(BLUEWAKE_SWITCH_ENABLE_GAME
+    "Statically link the translated game and portable BlueWake host" OFF)
+set(BLUEWAKE_COMPOSITE_DIR "" CACHE PATH
+    "External generated composite made from the user's GZLE01 disc")
+
+if(BLUEWAKE_SWITCH_ENABLE_GAME AND NOT BLUEWAKE_SWITCH_ENABLE_AURORA)
+    message(FATAL_ERROR
+        "BLUEWAKE_SWITCH_ENABLE_GAME requires BLUEWAKE_SWITCH_ENABLE_AURORA")
+endif()
 
 if(NOT EXISTS "${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime/CMakeLists.txt")
     message(FATAL_ERROR
@@ -46,12 +55,67 @@ else()
 endif()
 add_subdirectory("${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime" gxruntime)
 
-if(BLUEWAKE_SWITCH_ENABLE_AURORA)
+if(BLUEWAKE_SWITCH_ENABLE_GAME)
+    if(NOT EXISTS "${BLUEWAKE_COMPOSITE_DIR}/generated_composite.h" OR
+       NOT EXISTS "${BLUEWAKE_COMPOSITE_DIR}/module_tables.inc" OR
+       NOT EXISTS "${BLUEWAKE_COMPOSITE_DIR}/rel_modules.inc")
+        message(FATAL_ERROR
+            "BLUEWAKE_COMPOSITE_DIR must be a generated composite prepared "
+            "from the user's supported GZLE01 disc")
+    endif()
+    file(GLOB BLUEWAKE_COMPOSITE_NATIVE_OBJECTS
+        "${BLUEWAKE_COMPOSITE_DIR}/chunks_dol/*.o")
+    if(BLUEWAKE_COMPOSITE_NATIVE_OBJECTS)
+        message(FATAL_ERROR
+            "The Switch target requires portable DolRecomp C output; the "
+            "selected composite contains host-native DOL objects")
+    endif()
+
+    set(COMPOSITE_DIR "${BLUEWAKE_COMPOSITE_DIR}" CACHE PATH "" FORCE)
+    set(GXRUNTIME_DIR "${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime" CACHE PATH "" FORCE)
+    set(ABI_DIR
+        "${BLUEWAKE_RECOMPCORE_DIR}/Source/Core/Core/PowerPC/StaticRecomp"
+        CACHE PATH "" FORCE)
+    set(BLUEWAKE_COMPOSITE_STATIC ON CACHE BOOL "" FORCE)
+    add_subdirectory("${BLUEWAKE_REPO_ROOT}/cmake/composite"
+        bluewake_composite)
+
+    set(BLUEWAKE_HOST_SRC "${BLUEWAKE_REPO_ROOT}/runtime/host/src")
+    set(BLUEWAKE_SWITCH_MAIN
+        source/switch_entry.cpp
+        "${BLUEWAKE_HOST_SRC}/main.c"
+        "${BLUEWAKE_HOST_SRC}/module_symbols.c"
+        "${BLUEWAKE_HOST_SRC}/aram_dma.c"
+        "${BLUEWAKE_HOST_SRC}/audio_capture.c"
+        "${BLUEWAKE_HOST_SRC}/ipl_sram.c"
+        "${BLUEWAKE_HOST_SRC}/card_runtime.c"
+        "${BLUEWAKE_HOST_SRC}/callback_delivery.c"
+        "${BLUEWAKE_HOST_SRC}/cycle_domain.c"
+        "${BLUEWAKE_HOST_SRC}/delivery_digest.c"
+        "${BLUEWAKE_HOST_SRC}/edge_intercepts.c"
+        "${BLUEWAKE_HOST_SRC}/game_options.c"
+        "${BLUEWAKE_HOST_SRC}/fast_load.c"
+        "${BLUEWAKE_HOST_SRC}/fps_watch.c"
+        "${BLUEWAKE_HOST_SRC}/climb.c"
+        "${BLUEWAKE_HOST_SRC}/quick_doors.c"
+        "${BLUEWAKE_HOST_SRC}/draw_tags.c"
+        "${BLUEWAKE_HOST_SRC}/return_census.c"
+        "${BLUEWAKE_HOST_SRC}/interrupt_sources.c"
+        "${BLUEWAKE_HOST_SRC}/cold_fallback.c"
+        "${BLUEWAKE_HOST_SRC}/external_memory.c"
+        "${BLUEWAKE_HOST_SRC}/fpu_context.c"
+        "${BLUEWAKE_HOST_SRC}/pad_event_schedule.c"
+        "${BLUEWAKE_HOST_SRC}/pad_waypoint.c"
+        "${BLUEWAKE_HOST_SRC}/pad_wire.c"
+        "${BLUEWAKE_HOST_SRC}/rel_scratch_allocator.c"
+        "${BLUEWAKE_HOST_SRC}/scheduler_contract.c"
+        "${BLUEWAKE_HOST_SRC}/save_state.c")
+elseif(BLUEWAKE_SWITCH_ENABLE_AURORA)
     set(BLUEWAKE_SWITCH_MAIN source/aurora_gate.cpp)
 else()
     set(BLUEWAKE_SWITCH_MAIN source/main.c)
 endif()
-add_executable(WindWakerRecomp "${BLUEWAKE_SWITCH_MAIN}")
+add_executable(WindWakerRecomp ${BLUEWAKE_SWITCH_MAIN})
 if(BLUEWAKE_SWITCH_ENABLE_AURORA)
     target_compile_features(WindWakerRecomp PRIVATE cxx_std_20)
 else()
@@ -68,6 +132,21 @@ target_link_libraries(WindWakerRecomp PRIVATE GXRuntime::runtime nx)
 if(BLUEWAKE_SWITCH_ENABLE_AURORA)
     target_link_libraries(WindWakerRecomp PRIVATE GXRuntime::aurora)
     bluewake_link_switch_nvk(WindWakerRecomp)
+endif()
+if(BLUEWAKE_SWITCH_ENABLE_GAME)
+    set_source_files_properties("${BLUEWAKE_HOST_SRC}/main.c" PROPERTIES
+        COMPILE_DEFINITIONS "main=bluewake_host_main")
+    target_compile_definitions(WindWakerRecomp PRIVATE
+        BLUEWAKE_STATIC_MODULE=1
+        BLUEWAKE_ENABLE_DEVELOPER_TRACING=0
+        BLUEWAKE_EDGE_CENSUS=0
+        DOLRECOMP_CPU_HEADER="core/cpu.h")
+    target_include_directories(WindWakerRecomp PRIVATE
+        "${BLUEWAKE_HOST_SRC}"
+        "${BLUEWAKE_RECOMPCORE_DIR}/GXRuntime/include"
+        "${ABI_DIR}")
+    target_link_libraries(WindWakerRecomp PRIVATE gGZLE01_recomp z m pthread)
+    set_target_properties(WindWakerRecomp PROPERTIES LINKER_LANGUAGE CXX)
 endif()
 
 set(BLUEWAKE_NACP "${CMAKE_CURRENT_BINARY_DIR}/WindWakerRecomp.nacp")

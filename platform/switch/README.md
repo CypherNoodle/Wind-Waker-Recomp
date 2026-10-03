@@ -106,6 +106,55 @@ milestone, not a claim that Aurora or translated gameplay renders on hardware.
 The default remains the verified GXRuntime bring-up target until the next build
 is explicitly authorized.
 
+## Milestone 4: statically linked game host
+
+The source tree now stages the first complete host path behind
+`BLUEWAKE_SWITCH_ENABLE_GAME`. Unlike macOS, an NRO cannot load the translated
+game from a `.dylib`, so the composite can be built as a static library and its
+existing exported ABI is resolved inside the executable. The desktop dynamic
+loader remains available through the same resolver interface.
+
+The Switch entry point supplies only platform defaults. At runtime it expects
+the owner's files in this layout:
+
+```text
+sdmc:/switch/WindWakerRecomp/
+  WindWakerRecomp.nro
+  game/
+    main.dol
+    GZLE01.iso
+    rels/
+  save/
+  states/
+```
+
+`main.dol`, the RELs, the disc image and the generated composite are never
+committed or included in the project's public CI artifacts.
+`BLUEWAKE_COMPOSITE_DIR` must point at portable C output produced locally by the
+existing DolRecomp/composite flow; host-native `.o` chunks are rejected because
+they cannot be linked into an AArch64 NRO. A personal full-host NRO necessarily
+contains translated code derived from the owner's game and must not be
+redistributed.
+
+Once builds are authorized, the staged full-host configuration is:
+
+```sh
+platform/switch/build.sh \
+  -DBLUEWAKE_SWITCH_ENABLE_AURORA=ON \
+  -DBLUEWAKE_SWITCH_ENABLE_GAME=ON \
+  -DBLUEWAKE_COMPOSITE_DIR=/path/to/user-generated/composite \
+  -DBLUEWAKE_DAWN_DIR=/path/to/dawn-switch \
+  -DBLUEWAKE_NVK_DIR=/path/to/switch-nvk/nvk-switch \
+  -DBLUEWAKE_NVK_SOURCE_DIR=/path/to/switch-nvk \
+  -DBLUEWAKE_NVK_BUILD_DIR=/path/to/switch-nvk/mb
+```
+
+This path reuses the portable host's MEM1/ARAM, VI clock, SI/PAD, DI/DVD,
+audio-DMA and save-card services. Desktop-only ImGui, mouse-camera, jump-button
+and sprint input adapters are deliberately stubbed on Switch until their UI
+and controls are mapped to native libnx input. No full-host build or hardware
+claim has been made yet.
+
 ## Continuous integration
 
 `.github/workflows/switch.yml` follows the PaperBoat-nx Switch workflow: it

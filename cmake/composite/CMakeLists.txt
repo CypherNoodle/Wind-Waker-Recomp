@@ -11,6 +11,8 @@ set(COMPOSITE_DIR "" CACHE PATH "Composite output dir (generated.h, module_table
 set(GXRUNTIME_DIR "" CACHE PATH "GXRuntime checkout")
 set(ABI_DIR "" CACHE PATH "Directory containing StaticRecompABI.h")
 set(COMPOSITE_OPTIMIZATION_LEVEL "2" CACHE STRING "Generated composite optimization level (0, 1, or 2)")
+option(BLUEWAKE_COMPOSITE_STATIC
+  "Link the translated composite into a platform executable" OFF)
 set_property(CACHE COMPOSITE_OPTIMIZATION_LEVEL PROPERTY STRINGS 0 1 2)
 if(NOT COMPOSITE_OPTIMIZATION_LEVEL MATCHES "^[012]$")
   message(FATAL_ERROR "COMPOSITE_OPTIMIZATION_LEVEL must be 0, 1, or 2")
@@ -57,15 +59,26 @@ list(APPEND CHUNK_INPUTS ${DOL_CHUNK_OBJECTS})
 list(LENGTH CHUNK_INPUTS NUM_CHUNKS)
 message(STATUS "${NUM_CHUNKS} chunk translation units")
 
-add_library(${MODULE_NAME} SHARED
-  module_export.c
-  dispatch_loop.c
+set(COMPOSITE_RUNTIME_SOURCES
   ${GXRUNTIME_DIR}/src/core/cpu.c
   ${GXRUNTIME_DIR}/src/core/cpu_exception.c
   ${GXRUNTIME_DIR}/src/core/cpu_interpreter.c
   ${GXRUNTIME_DIR}/src/core/cpu_interpreter_table.c
   ${GXRUNTIME_DIR}/src/core/cpu_interpreter_float.c
-  ${GXRUNTIME_DIR}/src/core/cpu_interpreter_integer.c
+  ${GXRUNTIME_DIR}/src/core/cpu_interpreter_integer.c)
+if(BLUEWAKE_COMPOSITE_STATIC)
+  # The executable already links GXRuntime. A second CPU runtime would split
+  # guest aliases and write journals, and its public symbols would collide.
+  set(COMPOSITE_LIBRARY_KIND STATIC)
+  set(COMPOSITE_RUNTIME_SOURCES "")
+else()
+  set(COMPOSITE_LIBRARY_KIND SHARED)
+endif()
+
+add_library(${MODULE_NAME} ${COMPOSITE_LIBRARY_KIND}
+  module_export.c
+  dispatch_loop.c
+  ${COMPOSITE_RUNTIME_SOURCES}
   ${CHUNK_INPUTS})
 
 set_target_properties(${MODULE_NAME} PROPERTIES PREFIX "" OUTPUT_NAME "${MODULE_NAME}" UNITY_BUILD OFF C_VISIBILITY_PRESET hidden)

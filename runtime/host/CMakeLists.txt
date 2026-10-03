@@ -22,6 +22,7 @@ add_subdirectory(${GXRUNTIME_DIR} gxruntime_build)
 
 add_executable(bluewake_host
     src/main.c
+    src/module_symbols.c
     src/aram_dma.c
     src/audio_capture.c
     src/ipl_sram.c

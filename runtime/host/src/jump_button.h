@@ -20,6 +20,18 @@
 //   BLUEWAKE_JUMP_TEST_TARGET=r:n   hold L (targeting) for n retraces from r, for
 //                                   testing that a press then does nothing
 
+#if defined(__SWITCH__)
+static inline void bluewake_jump_button_attach(CPUState* cpu) { (void)cpu; }
+static inline void bluewake_jump_button_event(const void* event) { (void)event; }
+static inline void bluewake_jump_button_retrace(void) {}
+static inline void bluewake_jump_button_reload(void) {}
+static inline bool bluewake_jump_button_dispatch(CPUState* cpu, u32 address) {
+    (void)cpu;
+    (void)address;
+    return false;
+}
+#else
+
 // Once the guest is running.
 void bluewake_jump_button_attach(CPUState* cpu);
 // Every SDL event the Aurora window sees (the mouse camera's observer passes
@@ -41,5 +53,7 @@ bool bluewake_jump_button_enter(CPUState* cpu, u32 address);
 static inline bool bluewake_jump_button_dispatch(CPUState* cpu, u32 address) {
     return __builtin_expect(bluewake_jump_button_armed, 0) && bluewake_jump_button_enter(cpu, address);
 }
+
+#endif
 
 #endif

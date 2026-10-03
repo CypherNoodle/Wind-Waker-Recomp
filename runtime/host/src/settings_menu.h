@@ -21,8 +21,9 @@ extern "C" {
 //                                 Application Support/Wind Waker Recomp/
 //                                 settings.ini); none: neither read nor written
 
-#if defined(__APPLE__) && TARGET_OS_IPHONE
-// The iOS app has its own menu.
+#if (defined(__APPLE__) && TARGET_OS_IPHONE) || defined(__SWITCH__)
+// The iOS app has its own menu. Switch has no desktop ImGui settings window;
+// its first host milestone reads fixed launch defaults from switch_entry.cpp.
 static inline void bluewake_settings_load(void) {}
 static inline void bluewake_settings_menu_install(void) {}
 static inline bool bluewake_settings_menu_event(const void* sdl_event) {
