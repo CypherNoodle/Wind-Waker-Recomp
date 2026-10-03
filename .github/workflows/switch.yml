@@ -15,18 +15,72 @@ concurrency:
 jobs:
   aurora-gate:
     runs-on: ubuntu-24.04
-    container: ghcr.io/hayatog/switch-nvk-build:latest
+    container: devkitpro/devkita64:latest
     timeout-minutes: 180
     env:
       RECOMPCORE_SHA: 83611d9ca4cc8c435d02f6f5f5d4f4e310e33559
       DAWN_SHA: c70c486ec5b441001e6578c186a275eb590c5352
       SWITCH_NVK_SHA: 6eec707da3ad5f86c64f748226583202801bfd03
+      RUSTUP_HOME: /opt/rust/rustup
+      CARGO_HOME: /opt/rust/cargo
+      LIBCLANG_PATH: /usr/lib/llvm-15/lib
+      LLVM_CONFIG: /usr/bin/llvm-config-15
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore Rust NVK tools
+        uses: actions/cache@v4
+        with:
+          path: /opt/rust
+          key: switch-nvk-rust-tools-v1
+
+      - name: Install the NVK build toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export PATH="$CARGO_HOME/bin:$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH"
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            python3-pip bison flex curl ca-certificates pkg-config \
+            clang libclang-dev llvm-dev git build-essential cmake \
+            llvm-15-dev clang-15 libclang-15-dev libclc-15-dev libclc-15 \
+            llvm-spirv-15 libllvmspirvlib-15-dev spirv-tools libdrm-dev \
+            glslang-tools fonts-dejavu-core
+          python3 -m pip install --break-system-packages --no-cache-dir \
+            'meson>=1.4' mako pyyaml pillow
+          if ! test -x "$CARGO_HOME/bin/rustc"; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+              sh -s -- -y --default-toolchain nightly --profile minimal --component rust-src
+          fi
+          rustup component add rust-src rustfmt
+          command -v bindgen >/dev/null || cargo install --locked bindgen-cli
+          command -v cbindgen >/dev/null || cargo install --locked cbindgen
+
+          mkdir -p /opt/switch-cross-include/libdrm
+          cp /usr/include/xf86drm.h /usr/include/xf86drmMode.h /opt/switch-cross-include/ 2>/dev/null || true
+          cp -r /usr/include/libdrm/. /opt/switch-cross-include/ 2>/dev/null || true
+          cp -r /usr/include/libdrm/. /opt/switch-cross-include/libdrm/ 2>/dev/null || true
+
+          xdir="$DEVKITPRO/portlibs/switch/lib/pkgconfig"
+          mkdir -p "$xdir"
+          for name in libclc LLVMSPIRVLib SPIRV-Tools SPIRV-Tools-shared SPIRV-Headers; do
+            pc_file=$(find /usr -name "$name.pc" -print -quit 2>/dev/null || true)
+            if test -n "$pc_file"; then
+              cp "$pc_file" "$xdir/"
+            fi
+          done
+          aarch64-none-elf-ar rcs "$DEVKITPRO/portlibs/switch/lib/libdl.a"
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          echo "$DEVKITPRO/devkitA64/bin" >> "$GITHUB_PATH"
+          echo "$DEVKITPRO/tools/bin" >> "$GITHUB_PATH"
+          rustc --version
+          bindgen --version
+          cbindgen --version
+          meson --version
+
       - name: Verify the Switch toolchain
         run: |
-          export PATH="$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH"
+          export PATH="$CARGO_HOME/bin:$DEVKITPRO/devkitA64/bin:$DEVKITPRO/tools/bin:$PATH"
           aarch64-none-elf-g++ --version
           cmake --version
           ninja --version
