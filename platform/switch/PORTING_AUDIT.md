@@ -115,3 +115,25 @@ standalone libnx/NWindow/Vulkan/NVK clear-and-present test. Aurora, Dawn,
 translated game objects, and audio remain gated until that graphics test is
 both built and hardware-validated. No no-op render/audio implementations may
 be added to bypass either gate.
+
+## Milestone 2 build-side verification
+
+The pinned `HayatoG/switch-nvk` source was rebuilt locally against Mesa 25.0.7
+with devkitA64 15.2.0. Its static NVK, NIR/SPIR-V compiler, Nouveau winsys,
+`VK_NN_vi_surface` WSI, compatibility shims and Vulkan runtime all compiled for
+AArch64. Mesa's final shared-library target is intentionally inapplicable to
+Horizon/libnx; the application consumes the completed static archives instead.
+
+The repository target `WindWakerVulkanSmoke` then linked against the packaged
+NVK tree and produced a real NRO on 2026-10-02:
+
+- ELF: 23,693,768 bytes, ELF64 AArch64 PIE, build ID
+  `5ebec2d2daecdbb43048590f24dfd005c878febe`.
+- NRO: 12,609,733 bytes, SHA-256
+  `03569ae3bbb23f70fde9e6eec7455f7da179f8b0ecb469c4ddead91941990646`.
+- The linked ELF defines `vk_icdGetInstanceProcAddr`,
+  `wsi_CreateViSurfaceNN`, and `wsi_switch_init_wsi`.
+
+This completes only the build/link/package portion of milestone 2. The NRO
+must still be run on physical hardware and show the cycling clear colour before
+Aurora/Dawn work begins.

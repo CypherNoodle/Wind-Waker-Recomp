@@ -45,6 +45,30 @@ and NRO checksum. Running the result still requires a physical Switch in
 Application mode; this repository does not treat a successful package step as
 hardware validation.
 
+## Milestone 2: NVK clear/present gate
+
+Build and package `HayatoG/switch-nvk` at the revision recorded in
+`PORTING_AUDIT.md`, then point this project at its install tree:
+
+```sh
+export DEVKITPRO=/opt/devkitpro
+export BLUEWAKE_NVK_DIR=/path/to/switch-nvk/nvk-switch
+platform/switch/build-vulkan-smoke.sh
+```
+
+This produces
+`build/switch-vulkan/switch/WindWakerVulkanSmoke/WindWakerVulkanSmoke.nro`.
+It uses a real `NWindow`, `VK_NN_vi_surface`, NVK swapchain, command buffer,
+image clear, queue submission and presentation loop. A successful run cycles
+the display between blue and red; press `+` to exit. Failures are written to
+`sdmc:/WindWakerRecomp-vulkan-smoke.log` and Mesa diagnostics to the adjacent
+`-mesa.log` file.
+
+The target consumes NVK as an external, pinned static package. Neither the
+71 MiB library nor generated Mesa sources are committed here. This gate does
+not enable Aurora/Dawn and does not claim hardware success until the NRO is run
+on a physical Switch in Application mode.
+
 ## Continuous integration
 
 `.github/workflows/switch.yml` follows the PaperBoat-nx Switch workflow: it
